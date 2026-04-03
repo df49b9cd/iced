@@ -1,12 +1,13 @@
 use iced::widget::markdown;
 
-use crate::remend::RemendOptions;
+use remend::RemendOptions;
+use remend::detect_direction::TextDirection;
 
 /// A streaming markdown document that tracks changes across incremental updates.
 ///
 /// Wraps [`markdown::Content`] and maintains word counts per block for
 /// animation synchronization. Optionally preprocesses streaming text with
-/// [`remend`](crate::remend) to auto-complete incomplete markdown syntax.
+/// [`remend`] to auto-complete incomplete markdown syntax.
 #[derive(Debug)]
 pub struct StreamContent {
     inner: markdown::Content,
@@ -29,6 +30,10 @@ pub struct StreamContent {
     has_incomplete_code_fence: bool,
     /// Whether the current text contains a table.
     has_table: bool,
+    /// Whether to normalize indentation on HTML blocks (strip 4+ spaces before `<`).
+    normalize_html: bool,
+    /// Detected text direction (cached, recomputed on push_str).
+    text_direction: TextDirection,
 }
 
 impl Default for StreamContent {
@@ -52,6 +57,8 @@ impl StreamContent {
             literal_tags: Vec::new(),
             has_incomplete_code_fence: false,
             has_table: false,
+            normalize_html: false,
+            text_direction: TextDirection::default(),
         }
     }
 
@@ -102,6 +109,27 @@ impl StreamContent {
         self.has_table
     }
 
+    /// Enables or disables HTML indentation normalization.
+    ///
+    /// When enabled, lines with 4+ spaces of indentation before an HTML tag
+    /// have that indentation stripped, preventing CommonMark from treating
+    /// them as indented code blocks.
+    pub fn set_normalize_html(&mut self, enabled: bool) {
+        self.normalize_html = enabled;
+    }
+
+    /// Returns whether HTML indentation normalization is enabled.
+    pub fn normalize_html(&self) -> bool {
+        self.normalize_html
+    }
+
+    /// Returns the detected text direction (LTR or RTL).
+    ///
+    /// Uses the "first strong character" algorithm, updated on each `push_str`.
+    pub fn text_direction(&self) -> TextDirection {
+        self.text_direction
+    }
+
     /// Pushes more markdown text into the content, parsing incrementally.
     ///
     /// When remend is enabled, the full accumulated text is preprocessed
@@ -120,15 +148,24 @@ impl StreamContent {
         if self.remend_options.is_some()
             || !self.custom_tags.is_empty()
             || !self.literal_tags.is_empty()
+            || self.normalize_html
         {
             self.raw_markdown.push_str(markdown);
 
             // Run the preprocessing pipeline, producing a final String.
             let mut text: String = self.raw_markdown.clone();
 
+            // 0. Normalize HTML indentation: strip 4+ spaces before HTML tags.
+            if self.normalize_html {
+                let result = remend::preprocess::normalize_html_indentation(&text);
+                if let std::borrow::Cow::Owned(s) = result {
+                    text = s;
+                }
+            }
+
             // 1. remend: auto-complete incomplete syntax.
             if let Some(ref options) = self.remend_options {
-                let result = crate::remend::remend(&text, options);
+                let result = remend::remend(&text, options);
                 if let std::borrow::Cow::Owned(s) = result {
                     text = s;
                 }
@@ -137,7 +174,7 @@ impl StreamContent {
             // 2. Literal tag content: escape markdown inside specified tags.
             if !self.literal_tags.is_empty() {
                 let tag_refs: Vec<&str> = self.literal_tags.iter().map(|s| s.as_str()).collect();
-                let result = crate::preprocess::preprocess_literal_tag_content(&text, &tag_refs);
+                let result = remend::preprocess::preprocess_literal_tag_content(&text, &tag_refs);
                 if let std::borrow::Cow::Owned(s) = result {
                     text = s;
                 }
@@ -146,7 +183,7 @@ impl StreamContent {
             // 3. Custom tags: prevent blank-line block splitting.
             if !self.custom_tags.is_empty() {
                 let tag_refs: Vec<&str> = self.custom_tags.iter().map(|s| s.as_str()).collect();
-                let result = crate::preprocess::preprocess_custom_tags(&text, &tag_refs);
+                let result = remend::preprocess::preprocess_custom_tags(&text, &tag_refs);
                 if let std::borrow::Cow::Owned(s) = result {
                     text = s;
                 }
@@ -158,16 +195,20 @@ impl StreamContent {
 
             // Update incomplete block state.
             self.has_incomplete_code_fence =
-                crate::incomplete_code::has_incomplete_code_fence(&self.raw_markdown);
-            self.has_table = crate::incomplete_code::has_table(&self.raw_markdown);
+                remend::incomplete_code::has_incomplete_code_fence(&self.raw_markdown);
+            self.has_table = remend::incomplete_code::has_table(&self.raw_markdown);
         } else {
             self.raw_markdown.push_str(markdown);
             self.inner.push_str(markdown);
 
             self.has_incomplete_code_fence =
-                crate::incomplete_code::has_incomplete_code_fence(&self.raw_markdown);
-            self.has_table = crate::incomplete_code::has_table(&self.raw_markdown);
+                remend::incomplete_code::has_incomplete_code_fence(&self.raw_markdown);
+            self.has_table = remend::incomplete_code::has_table(&self.raw_markdown);
         }
+
+        // Update text direction (only needs first ~200 chars for the algorithm).
+        self.text_direction =
+            remend::detect_direction::detect_text_direction(&self.raw_markdown);
 
         self.recompute_word_counts();
     }

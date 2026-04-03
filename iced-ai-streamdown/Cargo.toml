@@ -16,6 +16,7 @@ highlighter = ["iced/highlighter"]
 iced = { workspace = true, features = ["advanced", "markdown"] }
 iced_widget = { workspace = true, features = ["markdown"] }
 lilt = { workspace = true }
+remend = { workspace = true }
 
 [dev-dependencies]
 iced = { workspace = true, features = ["advanced", "markdown", "wgpu", "tiny-skia", "tokio"] }

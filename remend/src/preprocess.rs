@@ -1,7 +1,7 @@
 //! Markdown preprocessing for custom and literal HTML tags.
 //!
-//! Ported from Streamdown's `preprocess-custom-tags.ts` and
-//! `preprocess-literal-tag-content.ts`.
+//! Ported from Streamdown's `preprocess-custom-tags.ts`,
+//! `preprocess-literal-tag-content.ts`, and `normalizeHtmlIndentation`.
 
 use std::borrow::Cow;
 
@@ -168,6 +168,69 @@ fn escape_markdown(text: &str) -> String {
     out
 }
 
+/// Strips excessive indentation (4+ spaces/tabs) from lines that start HTML blocks.
+///
+/// CommonMark treats 4+ spaces of indentation as code blocks. When LLMs generate
+/// indented HTML, this causes the HTML to render as a code block instead of being
+/// parsed as HTML. This function strips that indentation.
+///
+/// Ported from Streamdown's `normalizeHtmlIndentation`.
+pub fn normalize_html_indentation(text: &str) -> Cow<'_, str> {
+    if text.is_empty() {
+        return Cow::Borrowed(text);
+    }
+
+    // Quick check: does the content start with optional whitespace then an HTML-like tag?
+    if !starts_with_html_block(text) {
+        return Cow::Borrowed(text);
+    }
+
+    let mut result = String::new();
+    let mut changed = false;
+    let mut first = true;
+
+    for line in text.split('\n') {
+        if !first {
+            result.push('\n');
+        }
+        first = false;
+
+        // Count leading whitespace.
+        let trimmed = line.trim_start_matches(|c: char| c == ' ' || c == '\t');
+        let indent_len = line.len() - trimmed.len();
+
+        // If 4+ spaces/tabs of indentation and the rest starts with an HTML tag, strip it.
+        if indent_len >= 4 && starts_with_html_tag_char(trimmed) {
+            result.push_str(trimmed);
+            changed = true;
+        } else {
+            result.push_str(line);
+        }
+    }
+
+    if changed {
+        Cow::Owned(result)
+    } else {
+        Cow::Borrowed(text)
+    }
+}
+
+/// Returns true if text starts with optional whitespace followed by `<` and a tag char.
+fn starts_with_html_block(text: &str) -> bool {
+    let trimmed = text.trim_start_matches(|c: char| c == ' ' || c == '\t');
+    starts_with_html_tag_char(trimmed)
+}
+
+/// Returns true if text starts with `<` followed by a word char, `!`, `/`, or `?`.
+fn starts_with_html_tag_char(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    if bytes.len() < 2 || bytes[0] != b'<' {
+        return false;
+    }
+    let next = bytes[1];
+    next.is_ascii_alphanumeric() || matches!(next, b'!' | b'/' | b'?' | b'-')
+}
+
 /// Case-insensitive search for an opening tag like `<tagname` followed by whitespace, `/`, or `>`.
 fn find_tag_open(haystack: &str, tag_name: &str) -> Option<usize> {
     let haystack_lower = haystack.to_ascii_lowercase();
@@ -265,5 +328,66 @@ mod tests {
             escape_markdown("\\`*_~[]|"),
             "\\\\\\`\\*\\_\\~\\[\\]\\|"
         );
+    }
+
+    // --- normalize_html_indentation tests ---
+
+    #[test]
+    fn normalize_html_strips_4_space_indent() {
+        let input = "    <div>\n        <p>text</p>\n    </div>";
+        let result = normalize_html_indentation(input);
+        assert_eq!(result.as_ref(), "<div>\n<p>text</p>\n</div>");
+    }
+
+    #[test]
+    fn normalize_html_preserves_non_html_indent() {
+        let input = "    regular text\n    more text";
+        let result = normalize_html_indentation(input);
+        // Doesn't start with HTML tag, so unchanged.
+        assert!(matches!(result, Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn normalize_html_preserves_small_indent() {
+        let input = "   <div>ok</div>";
+        let result = normalize_html_indentation(input);
+        // Only 3 spaces — below threshold.
+        assert!(matches!(result, Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn normalize_html_empty_string() {
+        assert!(matches!(
+            normalize_html_indentation(""),
+            Cow::Borrowed(_)
+        ));
+    }
+
+    #[test]
+    fn normalize_html_mixed_lines() {
+        let input = "    <div>\nsome text\n      </div>";
+        let result = normalize_html_indentation(input);
+        assert_eq!(result.as_ref(), "<div>\nsome text\n</div>");
+    }
+
+    #[test]
+    fn normalize_html_tab_indent() {
+        let input = "\t\t\t\t<section>\n\t\t\t\t\t<p>hi</p>\n\t\t\t\t</section>";
+        let result = normalize_html_indentation(input);
+        assert_eq!(result.as_ref(), "<section>\n<p>hi</p>\n</section>");
+    }
+
+    #[test]
+    fn normalize_html_closing_tag() {
+        let input = "    </div>";
+        let result = normalize_html_indentation(input);
+        assert_eq!(result.as_ref(), "</div>");
+    }
+
+    #[test]
+    fn normalize_html_comment() {
+        let input = "    <!-- comment -->";
+        let result = normalize_html_indentation(input);
+        assert_eq!(result.as_ref(), "<!-- comment -->");
     }
 }

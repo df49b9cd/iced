@@ -18,6 +18,10 @@ mod setext_heading;
 mod single_tilde;
 mod strikethrough;
 
+pub mod detect_direction;
+pub mod incomplete_code;
+pub mod preprocess;
+
 pub use options::{priority, LinkMode, RemendHandler, RemendOptions};
 
 // Re-export utility functions for use by custom handlers.
