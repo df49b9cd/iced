@@ -1,9 +1,12 @@
 use iced::widget::markdown;
 
+use crate::remend::RemendOptions;
+
 /// A streaming markdown document that tracks changes across incremental updates.
 ///
 /// Wraps [`markdown::Content`] and maintains word counts per block for
-/// animation synchronization.
+/// animation synchronization. Optionally preprocesses streaming text with
+/// [`remend`](crate::remend) to auto-complete incomplete markdown syntax.
 #[derive(Debug)]
 pub struct StreamContent {
     inner: markdown::Content,
@@ -14,6 +17,10 @@ pub struct StreamContent {
     /// Cumulative word count prefix sums: `cumulative_words[i]` is the
     /// total words in blocks `0..i`.
     cumulative_words: Vec<usize>,
+    /// Accumulated raw markdown input (used when remend is enabled).
+    raw_markdown: String,
+    /// When `Some`, incomplete markdown syntax is auto-completed before parsing.
+    remend_options: Option<RemendOptions>,
 }
 
 impl Default for StreamContent {
@@ -31,10 +38,37 @@ impl StreamContent {
             is_streaming: false,
             word_counts: Vec::new(),
             cumulative_words: vec![0],
+            raw_markdown: String::new(),
+            remend_options: None,
         }
     }
 
+    /// Creates a new [`StreamContent`] with remend preprocessing enabled.
+    ///
+    /// Incomplete markdown syntax will be auto-completed before parsing,
+    /// ensuring content renders correctly during token-by-token streaming.
+    pub fn with_remend(options: RemendOptions) -> Self {
+        Self {
+            remend_options: Some(options),
+            ..Self::new()
+        }
+    }
+
+    /// Sets or clears the remend preprocessing options.
+    pub fn set_remend_options(&mut self, options: Option<RemendOptions>) {
+        self.remend_options = options;
+    }
+
+    /// Returns the current remend options, if enabled.
+    pub fn remend_options(&self) -> Option<&RemendOptions> {
+        self.remend_options.as_ref()
+    }
+
     /// Pushes more markdown text into the content, parsing incrementally.
+    ///
+    /// When remend is enabled, the full accumulated text is preprocessed
+    /// and re-parsed to handle retroactive syntax completion (e.g., closing
+    /// a `**` that was opened hundreds of characters ago).
     ///
     /// Automatically enters streaming mode on the first call. Call
     /// [`finish`](Self::finish) when the stream is complete.
@@ -44,12 +78,32 @@ impl StreamContent {
         }
 
         self.previous_item_count = self.inner.items().len();
-        self.inner.push_str(markdown);
+
+        if let Some(ref options) = self.remend_options {
+            self.raw_markdown.push_str(markdown);
+            let processed = crate::remend::remend(&self.raw_markdown, options);
+            // Must re-create Content since remend may change the full output.
+            self.inner = markdown::Content::new();
+            self.inner.push_str(&processed);
+        } else {
+            self.inner.push_str(markdown);
+        }
+
         self.recompute_word_counts();
     }
 
     /// Marks the stream as finished.
+    ///
+    /// When remend is enabled, performs a final re-parse of the raw markdown
+    /// *without* remend preprocessing (since the complete text should have
+    /// valid syntax).
     pub fn finish(&mut self) {
+        if self.remend_options.is_some() && !self.raw_markdown.is_empty() {
+            // Final parse: use the raw markdown as-is (complete text).
+            self.inner = markdown::Content::new();
+            self.inner.push_str(&self.raw_markdown);
+            self.recompute_word_counts();
+        }
         self.is_streaming = false;
     }
 
@@ -110,6 +164,11 @@ impl StreamContent {
             self.cumulative_words.push(prev + count);
         }
     }
+}
+
+/// Public wrapper for word counting in items (used by view.rs for offset tracking).
+pub fn count_words_in_item_public(item: &markdown::Item) -> usize {
+    count_words_in_item(item)
 }
 
 /// Counts words in a markdown item by examining its text content.

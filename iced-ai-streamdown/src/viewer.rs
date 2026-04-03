@@ -78,6 +78,18 @@ where
         .into()
 }
 
+/// Splits text spans into per-word sub-spans with animation opacity (no caret).
+///
+/// Used by code blocks and other contexts where the caret should not appear.
+pub fn animate_spans_no_caret(
+    base_spans: &[text::Span<'static, markdown::Uri>],
+    animation: &AnimationState,
+    global_word_offset: usize,
+    now: Instant,
+) -> Vec<text::Span<'static, markdown::Uri>> {
+    animate_spans(base_spans, animation, global_word_offset, now, None)
+}
+
 /// Splits text spans into per-word sub-spans with animation opacity applied.
 fn animate_spans(
     base_spans: &[text::Span<'static, markdown::Uri>],
@@ -133,19 +145,17 @@ fn animate_spans(
     }
 
     // Append caret if requested.
-    if let Some(settings) = caret_settings {
-        if let Some(caret_kind) = settings.caret {
-            let caret_color = settings.caret_color.unwrap_or(Color::WHITE);
+    if let Some(settings) = caret_settings
+        && let Some(caret_kind) = settings.caret
+    {
+        let caret_color = settings.caret_color.unwrap_or(Color::WHITE);
 
-            // Use a fixed epoch for blink calculation — the blink cycle is
-            // purely a function of `now` modulo the interval.
-            animated.push(caret::caret_span(
-                caret_kind,
-                caret_color,
-                now,
-                settings.caret_blink_interval,
-            ));
-        }
+        animated.push(caret::caret_span(
+            caret_kind,
+            caret_color,
+            now,
+            settings.caret_blink_interval,
+        ));
     }
 
     animated

@@ -4,7 +4,7 @@ use iced::window;
 use iced::{Element, Fill, Subscription, Task, Theme};
 
 use iced_ai_streamdown::{
-    AnimationKind, AnimationState, StreamContent, StreamSettings, stream_view,
+    AnimationKind, AnimationState, RemendOptions, StreamContent, StreamSettings, stream_view,
 };
 
 const SAMPLE_RESPONSE: &str = r#"# Hello from Streamdown!
@@ -67,7 +67,7 @@ impl Chat {
     fn new() -> (Self, Task<Message>) {
         (
             Self {
-                content: StreamContent::new(),
+                content: StreamContent::with_remend(RemendOptions::default()),
                 animation: AnimationState::new(AnimationKind::FadeIn)
                     .duration(std::time::Duration::from_millis(300))
                     .stagger(std::time::Duration::from_millis(30)),

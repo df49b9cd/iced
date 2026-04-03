@@ -46,6 +46,7 @@ pub mod animation;
 pub mod caret;
 pub mod content;
 pub mod custom_renderer;
+pub mod remend;
 pub mod settings;
 pub mod view;
 pub mod viewer;
@@ -54,6 +55,7 @@ pub use animation::AnimationState;
 pub use content::StreamContent;
 pub use settings::{AnimationKind, CaretKind};
 pub use custom_renderer::{CustomBlockRenderer, CustomRendererRegistry};
+pub use remend::{LinkMode, RemendOptions};
 pub use settings::StreamSettings;
 pub use view::stream_view;
 

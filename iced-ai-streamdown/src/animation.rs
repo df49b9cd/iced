@@ -100,6 +100,26 @@ impl AnimationState {
         })
     }
 
+    /// Returns `true` once at least one word has been revealed.
+    ///
+    /// Useful for triggering "animation started" events in the host application
+    /// (e.g., starting auto-scroll or hiding a loading indicator).
+    pub fn has_started(&self) -> bool {
+        !self.word_reveal_times.is_empty()
+    }
+
+    /// Returns `true` when all revealed words have finished their animation.
+    ///
+    /// Returns `false` if no words have been revealed yet or if any word is
+    /// still mid-animation. Useful for triggering "animation ended" events
+    /// (e.g., re-enabling user interaction or snapping scroll position).
+    pub fn has_finished(&self, now: Instant) -> bool {
+        if self.word_reveal_times.is_empty() {
+            return false;
+        }
+        !self.is_animating(now)
+    }
+
     /// Returns the total number of words that have been registered.
     pub fn word_count(&self) -> usize {
         self.word_reveal_times.len()
