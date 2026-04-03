@@ -2286,6 +2286,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "iced_ai_elements"
+version = "0.15.0-dev"
+dependencies = [
+ "iced",
+ "iced_futures",
+ "iced_graphics",
+ "iced_renderer",
+ "iced_wgpu",
+ "iced_widget",
+ "iced_winit",
+ "serde",
+]
+
+[[package]]
 name = "iced_beacon"
 version = "0.15.0-dev"
 dependencies = [

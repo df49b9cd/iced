@@ -1,0 +1,25 @@
+[package]
+name = "iced_ai_elements"
+description = "AI-themed components for iced"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["canvas", "wgpu"]
+canvas = ["iced_widget/canvas"]
+wgpu = ["iced_wgpu", "iced_widget/wgpu"]
+
+[dependencies]
+iced = { workspace = true, features = ["advanced"] }
+iced_widget.workspace = true
+iced_graphics.workspace = true
+iced_renderer.workspace = true
+iced_wgpu.workspace = true
+iced_wgpu.optional = true
+iced_winit.workspace = true
+iced_futures.workspace = true
+serde = { workspace = true, features = ["derive"] }
