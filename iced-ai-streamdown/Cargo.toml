@@ -1,0 +1,27 @@
+[package]
+name = "iced_ai_streamdown"
+description = "Streaming markdown renderer for AI chat, built on iced"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["highlighter"]
+highlighter = ["iced/highlighter"]
+
+[dependencies]
+iced = { workspace = true, features = ["advanced", "markdown"] }
+iced_widget = { workspace = true, features = ["markdown"] }
+lilt = { workspace = true }
+
+[dev-dependencies]
+iced = { workspace = true, features = ["advanced", "markdown", "wgpu", "tiny-skia", "tokio"] }
+tokio = { workspace = true }
+
+[[example]]
+name = "chat"
+path = "examples/chat.rs"
+required-features = ["highlighter"]

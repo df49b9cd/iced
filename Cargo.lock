@@ -2300,6 +2300,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "iced_ai_streamdown"
+version = "0.15.0-dev"
+dependencies = [
+ "iced",
+ "iced_widget",
+ "lilt",
+ "tokio",
+]
+
+[[package]]
 name = "iced_beacon"
 version = "0.15.0-dev"
 dependencies = [
