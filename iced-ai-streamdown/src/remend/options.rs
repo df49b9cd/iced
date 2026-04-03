@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 /// How to handle incomplete links.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LinkMode {
@@ -8,11 +10,47 @@ pub enum LinkMode {
     TextOnly,
 }
 
+/// A custom handler that transforms text during the remend pipeline.
+///
+/// Implement this trait to add custom preprocessing steps. Custom handlers
+/// are merged with the built-in handlers and sorted by priority.
+pub trait RemendHandler: Send + Sync {
+    /// Transform the text. Return `Cow::Borrowed(text)` if no changes are needed.
+    fn handle<'a>(&self, text: &'a str) -> Cow<'a, str>;
+
+    /// Unique identifier for this handler.
+    fn name(&self) -> &str;
+
+    /// Priority (lower runs first). Built-in priorities use 0–75.
+    /// Custom handlers default to 100.
+    fn priority(&self) -> i32 {
+        100
+    }
+}
+
+/// Built-in handler priorities, matching the TypeScript implementation.
+pub mod priority {
+    pub const SINGLE_TILDE: i32 = 0;
+    pub const COMPARISON_OPERATORS: i32 = 5;
+    pub const HTML_TAGS: i32 = 10;
+    pub const SETEXT_HEADINGS: i32 = 15;
+    pub const LINKS: i32 = 20;
+    pub const BOLD_ITALIC: i32 = 30;
+    pub const BOLD: i32 = 35;
+    pub const ITALIC_DOUBLE_UNDERSCORE: i32 = 40;
+    pub const ITALIC_SINGLE_ASTERISK: i32 = 41;
+    pub const ITALIC_SINGLE_UNDERSCORE: i32 = 42;
+    pub const INLINE_CODE: i32 = 50;
+    pub const STRIKETHROUGH: i32 = 60;
+    pub const KATEX: i32 = 70;
+    pub const INLINE_KATEX: i32 = 75;
+    pub const DEFAULT: i32 = 100;
+}
+
 /// Configuration options for the [`remend`](super::remend) function.
 ///
 /// All options default to `true` (enabled) except `inline_katex` which
 /// defaults to `false` (single `$` is ambiguous with currency symbols).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RemendOptions {
     /// Complete bold formatting (`**text` → `**text**`).
     pub bold: bool,
@@ -43,6 +81,30 @@ pub struct RemendOptions {
     pub comparison_operators: bool,
     /// How to handle incomplete links.
     pub link_mode: LinkMode,
+    /// Custom handlers to extend the remend pipeline.
+    pub handlers: Vec<Box<dyn RemendHandler>>,
+}
+
+impl std::fmt::Debug for RemendOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RemendOptions")
+            .field("bold", &self.bold)
+            .field("italic", &self.italic)
+            .field("bold_italic", &self.bold_italic)
+            .field("inline_code", &self.inline_code)
+            .field("strikethrough", &self.strikethrough)
+            .field("links", &self.links)
+            .field("images", &self.images)
+            .field("katex", &self.katex)
+            .field("inline_katex", &self.inline_katex)
+            .field("setext_headings", &self.setext_headings)
+            .field("html_tags", &self.html_tags)
+            .field("single_tilde", &self.single_tilde)
+            .field("comparison_operators", &self.comparison_operators)
+            .field("link_mode", &self.link_mode)
+            .field("handlers", &format!("[{} custom]", self.handlers.len()))
+            .finish()
+    }
 }
 
 impl Default for RemendOptions {
@@ -62,6 +124,7 @@ impl Default for RemendOptions {
             single_tilde: true,
             comparison_operators: true,
             link_mode: LinkMode::Protocol,
+            handlers: Vec::new(),
         }
     }
 }
@@ -134,6 +197,12 @@ impl RemendOptions {
 
     pub fn link_mode(mut self, mode: LinkMode) -> Self {
         self.link_mode = mode;
+        self
+    }
+
+    /// Add a custom handler to the pipeline.
+    pub fn handler(mut self, handler: Box<dyn RemendHandler>) -> Self {
+        self.handlers.push(handler);
         self
     }
 }

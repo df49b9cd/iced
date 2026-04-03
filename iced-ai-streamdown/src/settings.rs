@@ -27,6 +27,30 @@ pub enum CaretKind {
     Circle,
 }
 
+/// The easing function used for animation.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum EasingFunction {
+    /// Linear interpolation.
+    Linear,
+    /// Ease in (slow start).
+    EaseIn,
+    /// Ease out (slow end).
+    #[default]
+    EaseOut,
+    /// Ease in and out (slow start and end).
+    EaseInOut,
+}
+
+/// Whether animation is applied word-by-word or character-by-character.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AnimationSep {
+    /// Reveal word by word.
+    #[default]
+    Word,
+    /// Reveal character by character.
+    Char,
+}
+
 /// Configuration for the streaming markdown renderer.
 #[derive(Debug, Clone)]
 pub struct StreamSettings {
@@ -38,12 +62,18 @@ pub struct StreamSettings {
     pub animation_duration: Duration,
     /// Delay between each word's animation start.
     pub animation_stagger: Duration,
+    /// The easing function for animation transitions.
+    pub animation_easing: EasingFunction,
+    /// Whether to animate word-by-word or character-by-character.
+    pub animation_sep: AnimationSep,
     /// The caret to show at the insertion point, if any.
     pub caret: Option<CaretKind>,
     /// Override color for the caret. If `None`, uses the text color.
     pub caret_color: Option<Color>,
     /// How fast the caret blinks (half-period).
     pub caret_blink_interval: Duration,
+    /// Whether incomplete markdown preprocessing (remend) is enabled.
+    pub parse_incomplete_markdown: bool,
 }
 
 impl StreamSettings {
@@ -54,9 +84,12 @@ impl StreamSettings {
             animation: AnimationKind::FadeIn,
             animation_duration: Duration::from_millis(300),
             animation_stagger: Duration::from_millis(30),
+            animation_easing: EasingFunction::default(),
+            animation_sep: AnimationSep::default(),
             caret: Some(CaretKind::Block),
             caret_color: None,
             caret_blink_interval: Duration::from_millis(530),
+            parse_incomplete_markdown: true,
         }
     }
 
@@ -93,6 +126,24 @@ impl StreamSettings {
     /// Sets the caret blink interval.
     pub fn caret_blink_interval(mut self, interval: Duration) -> Self {
         self.caret_blink_interval = interval;
+        self
+    }
+
+    /// Sets the animation easing function.
+    pub fn animation_easing(mut self, easing: EasingFunction) -> Self {
+        self.animation_easing = easing;
+        self
+    }
+
+    /// Sets whether to animate word-by-word or character-by-character.
+    pub fn animation_sep(mut self, sep: AnimationSep) -> Self {
+        self.animation_sep = sep;
+        self
+    }
+
+    /// Sets whether incomplete markdown preprocessing is enabled.
+    pub fn parse_incomplete_markdown(mut self, enabled: bool) -> Self {
+        self.parse_incomplete_markdown = enabled;
         self
     }
 }

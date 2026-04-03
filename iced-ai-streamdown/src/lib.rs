@@ -46,6 +46,8 @@ pub mod animation;
 pub mod caret;
 pub mod content;
 pub mod custom_renderer;
+pub mod incomplete_code;
+pub mod preprocess;
 pub mod remend;
 pub mod settings;
 pub mod view;
@@ -53,11 +55,11 @@ pub mod viewer;
 
 pub use animation::AnimationState;
 pub use content::StreamContent;
-pub use settings::{AnimationKind, CaretKind};
+pub use settings::{AnimationKind, AnimationSep, CaretKind, EasingFunction};
 pub use custom_renderer::{CustomBlockRenderer, CustomRendererRegistry};
-pub use remend::{LinkMode, RemendOptions};
+pub use remend::{LinkMode, RemendHandler, RemendOptions};
 pub use settings::StreamSettings;
-pub use view::stream_view;
+pub use view::{stream_view, stream_view_with_renderers};
 
 // Re-export types from iced that users will commonly need alongside this crate.
 pub use iced::widget::markdown::{self, Item, Uri};

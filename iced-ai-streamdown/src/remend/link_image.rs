@@ -90,14 +90,50 @@ fn handle_incomplete_text(
     None
 }
 
+/// Finds the first incomplete `[` by scanning forward, skipping complete links.
+/// `max_pos` is the position of a known incomplete `[` (fallback).
+fn find_first_incomplete_bracket(text: &str, max_pos: usize) -> usize {
+    let bytes = text.as_bytes();
+    let mut j = 0;
+    while j < max_pos {
+        if bytes[j] == b'[' && !is_inside_code_block(text, j) {
+            // Skip images.
+            if j > 0 && bytes[j - 1] == b'!' {
+                j += 1;
+                continue;
+            }
+            // Check if this `[` has a matching `]`.
+            if let Some(close_idx) = find_matching_closing_bracket(text, j) {
+                // Check if it's a full link `[text](url)`.
+                if close_idx + 1 < bytes.len() && bytes[close_idx + 1] == b'(' {
+                    if let Some(url_end) = text[close_idx + 2..].find(')') {
+                        // Skip past this complete link.
+                        j = close_idx + 2 + url_end + 1;
+                        continue;
+                    }
+                }
+                j = close_idx + 1;
+            } else {
+                // This is an incomplete `[`.
+                return j;
+            }
+        } else {
+            j += 1;
+        }
+    }
+    // Fallback: the bracket at max_pos is always incomplete by contract.
+    max_pos
+}
+
 /// Creates the appropriate incomplete link output based on link mode.
 fn make_incomplete_link<'a>(text: &str, open_index: usize, link_mode: LinkMode) -> Cow<'a, str> {
     match link_mode {
         LinkMode::TextOnly => {
-            // Find the first incomplete `[` and strip just that bracket.
+            // Find the first incomplete `[` (scanning forward) and strip just that bracket.
+            let first_incomplete = find_first_incomplete_bracket(text, open_index);
             let mut result = String::with_capacity(text.len());
-            result.push_str(&text[..open_index]);
-            result.push_str(&text[open_index + 1..]);
+            result.push_str(&text[..first_incomplete]);
+            result.push_str(&text[first_incomplete + 1..]);
             Cow::Owned(result)
         }
         LinkMode::Protocol => {

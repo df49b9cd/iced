@@ -5,6 +5,7 @@ use iced::{alignment, Element, Font, Length};
 
 use crate::animation::AnimationState;
 use crate::content::StreamContent;
+use crate::custom_renderer::CustomRendererRegistry;
 use crate::settings::StreamSettings;
 use crate::viewer;
 
@@ -29,6 +30,24 @@ where
     Theme: markdown::Catalog + 'a,
     Renderer: core_text::Renderer<Font = Font> + 'a,
 {
+    stream_view_with_renderers(content, animation, settings, now, None)
+}
+
+/// Like [`stream_view`], but with optional custom code block renderers.
+///
+/// When a [`CustomRendererRegistry`] is provided, code blocks are checked
+/// against registered renderers before falling back to the default display.
+pub fn stream_view_with_renderers<'a, Theme, Renderer>(
+    content: &'a StreamContent,
+    animation: &AnimationState,
+    settings: &StreamSettings,
+    now: Instant,
+    custom_renderers: Option<&'a CustomRendererRegistry<markdown::Uri, Theme, Renderer>>,
+) -> Element<'a, markdown::Uri, Theme, Renderer>
+where
+    Theme: markdown::Catalog + 'a,
+    Renderer: core_text::Renderer<Font = Font> + 'a,
+{
     let items = content.items();
     let is_streaming = content.is_streaming();
     let previous_count = content.previous_item_count();
@@ -45,6 +64,21 @@ where
     let blocks = items.iter().enumerate().map(|(i, item)| {
         let is_last = i + 1 == items.len();
         let needs_animation = is_streaming && i >= changed_from;
+
+        // Check for custom code block renderer.
+        if let Some(registry) = custom_renderers {
+            if let markdown::Item::CodeBlock { language, code, .. } = item {
+                if let Some(lang) = language {
+                    if let Some(element) = registry.try_render(
+                        lang,
+                        code,
+                        is_streaming && is_last,
+                    ) {
+                        return element;
+                    }
+                }
+            }
+        }
 
         if needs_animation {
             let global_offset = content.global_word_offset(i);

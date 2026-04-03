@@ -1154,3 +1154,113 @@ fn streaming_table_with_bold() {
         "| Col1 | Col2 |\n|------|------|\n| **dat**"
     );
 }
+
+// ===========================================================================
+// Bug fix: KaTeX inside fenced code blocks
+// ===========================================================================
+
+#[test]
+fn katex_dollar_pairs_inside_fenced_code() {
+    // $$ inside ``` should not be treated as math delimiters.
+    assert_eq!(
+        r("```\n$$x + y\n```").as_ref(),
+        "```\n$$x + y\n```"
+    );
+}
+
+#[test]
+fn katex_escaped_dollar_pairs() {
+    // Escaped \$$ should not trigger math completion.
+    assert_eq!(r("\\$$100").as_ref(), "\\$$100");
+}
+
+#[test]
+fn inline_katex_inside_fenced_code() {
+    let opts = RemendOptions::default().inline_katex(true);
+    assert_eq!(
+        remend("```\n$x + y\n```", &opts).as_ref(),
+        "```\n$x + y\n```"
+    );
+}
+
+// ===========================================================================
+// Bug fix: text-only link mode forward scanning
+// ===========================================================================
+
+#[test]
+fn text_only_link_with_preceding_complete_link() {
+    let opts = RemendOptions::default().link_mode(LinkMode::TextOnly);
+    // The first link is complete; only the second bracket should be stripped.
+    assert_eq!(
+        remend("[done](http://ok) and [incomplete", &opts).as_ref(),
+        "[done](http://ok) and incomplete"
+    );
+}
+
+#[test]
+fn text_only_nested_brackets() {
+    let opts = RemendOptions::default().link_mode(LinkMode::TextOnly);
+    assert_eq!(
+        remend("Text [outer [inner", &opts).as_ref(),
+        "Text outer [inner"
+    );
+}
+
+// ===========================================================================
+// Custom handler support
+// ===========================================================================
+
+#[test]
+fn custom_handler_runs() {
+    use super::RemendHandler;
+
+    struct UpperHandler;
+    impl RemendHandler for UpperHandler {
+        fn handle<'a>(&self, text: &'a str) -> Cow<'a, str> {
+            if text.contains("UPPER") {
+                Cow::Borrowed(text)
+            } else {
+                Cow::Owned(text.to_uppercase())
+            }
+        }
+        fn name(&self) -> &str {
+            "upper"
+        }
+        fn priority(&self) -> i32 {
+            200 // runs after all built-ins
+        }
+    }
+
+    let opts = RemendOptions::default().handler(Box::new(UpperHandler));
+    let result = remend("hello **world", &opts);
+    // Built-in bold handler closes **, then custom handler uppercases.
+    assert_eq!(result.as_ref(), "HELLO **WORLD**");
+}
+
+#[test]
+fn custom_handler_priority_before_builtin() {
+    use super::RemendHandler;
+
+    struct PrependHandler;
+    impl RemendHandler for PrependHandler {
+        fn handle<'a>(&self, text: &'a str) -> Cow<'a, str> {
+            if text.starts_with("PREFIX: ") {
+                Cow::Borrowed(text)
+            } else {
+                Cow::Owned(format!("PREFIX: {}", text))
+            }
+        }
+        fn name(&self) -> &str {
+            "prepend"
+        }
+        fn priority(&self) -> i32 {
+            -1 // runs before all built-ins
+        }
+    }
+
+    let opts = RemendOptions::default()
+        .bold(false) // disable bold so we can test just the prepend
+        .handler(Box::new(PrependHandler));
+    let result = remend("hello", &opts);
+    assert_eq!(result.as_ref(), "PREFIX: hello");
+}

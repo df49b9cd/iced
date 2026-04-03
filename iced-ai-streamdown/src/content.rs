@@ -21,6 +21,14 @@ pub struct StreamContent {
     raw_markdown: String,
     /// When `Some`, incomplete markdown syntax is auto-completed before parsing.
     remend_options: Option<RemendOptions>,
+    /// Tag names for custom tag preprocessing (prevent blank-line block splitting).
+    custom_tags: Vec<String>,
+    /// Tag names for literal tag content preprocessing (escape markdown inside tags).
+    literal_tags: Vec<String>,
+    /// Whether the current text has an unclosed code fence.
+    has_incomplete_code_fence: bool,
+    /// Whether the current text contains a table.
+    has_table: bool,
 }
 
 impl Default for StreamContent {
@@ -40,6 +48,10 @@ impl StreamContent {
             cumulative_words: vec![0],
             raw_markdown: String::new(),
             remend_options: None,
+            custom_tags: Vec::new(),
+            literal_tags: Vec::new(),
+            has_incomplete_code_fence: false,
+            has_table: false,
         }
     }
 
@@ -64,6 +76,32 @@ impl StreamContent {
         self.remend_options.as_ref()
     }
 
+    /// Sets the tag names for custom tag preprocessing.
+    ///
+    /// Custom tag preprocessing prevents blank lines inside these tags
+    /// from splitting the block during CommonMark parsing.
+    pub fn set_custom_tags(&mut self, tags: Vec<String>) {
+        self.custom_tags = tags;
+    }
+
+    /// Sets the tag names for literal tag content preprocessing.
+    ///
+    /// Literal tag preprocessing escapes markdown metacharacters inside
+    /// these tags so their content renders as plain text.
+    pub fn set_literal_tags(&mut self, tags: Vec<String>) {
+        self.literal_tags = tags;
+    }
+
+    /// Returns whether the current text has an unclosed code fence.
+    pub fn has_incomplete_code_fence(&self) -> bool {
+        self.has_incomplete_code_fence
+    }
+
+    /// Returns whether the current text contains a table.
+    pub fn has_table(&self) -> bool {
+        self.has_table
+    }
+
     /// Pushes more markdown text into the content, parsing incrementally.
     ///
     /// When remend is enabled, the full accumulated text is preprocessed
@@ -79,14 +117,56 @@ impl StreamContent {
 
         self.previous_item_count = self.inner.items().len();
 
-        if let Some(ref options) = self.remend_options {
+        if self.remend_options.is_some()
+            || !self.custom_tags.is_empty()
+            || !self.literal_tags.is_empty()
+        {
             self.raw_markdown.push_str(markdown);
-            let processed = crate::remend::remend(&self.raw_markdown, options);
-            // Must re-create Content since remend may change the full output.
+
+            // Run the preprocessing pipeline, producing a final String.
+            let mut text: String = self.raw_markdown.clone();
+
+            // 1. remend: auto-complete incomplete syntax.
+            if let Some(ref options) = self.remend_options {
+                let result = crate::remend::remend(&text, options);
+                if let std::borrow::Cow::Owned(s) = result {
+                    text = s;
+                }
+            }
+
+            // 2. Literal tag content: escape markdown inside specified tags.
+            if !self.literal_tags.is_empty() {
+                let tag_refs: Vec<&str> = self.literal_tags.iter().map(|s| s.as_str()).collect();
+                let result = crate::preprocess::preprocess_literal_tag_content(&text, &tag_refs);
+                if let std::borrow::Cow::Owned(s) = result {
+                    text = s;
+                }
+            }
+
+            // 3. Custom tags: prevent blank-line block splitting.
+            if !self.custom_tags.is_empty() {
+                let tag_refs: Vec<&str> = self.custom_tags.iter().map(|s| s.as_str()).collect();
+                let result = crate::preprocess::preprocess_custom_tags(&text, &tag_refs);
+                if let std::borrow::Cow::Owned(s) = result {
+                    text = s;
+                }
+            }
+
+            // Must re-create Content since preprocessing may change the full output.
             self.inner = markdown::Content::new();
-            self.inner.push_str(&processed);
+            self.inner.push_str(&text);
+
+            // Update incomplete block state.
+            self.has_incomplete_code_fence =
+                crate::incomplete_code::has_incomplete_code_fence(&self.raw_markdown);
+            self.has_table = crate::incomplete_code::has_table(&self.raw_markdown);
         } else {
+            self.raw_markdown.push_str(markdown);
             self.inner.push_str(markdown);
+
+            self.has_incomplete_code_fence =
+                crate::incomplete_code::has_incomplete_code_fence(&self.raw_markdown);
+            self.has_table = crate::incomplete_code::has_table(&self.raw_markdown);
         }
 
         self.recompute_word_counts();

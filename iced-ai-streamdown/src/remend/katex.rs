@@ -2,15 +2,32 @@ use std::borrow::Cow;
 
 use super::utils::{cow_append, is_part_of_triple_backtick};
 
-/// Counts `$$` pairs outside of inline code blocks.
+/// Counts `$$` pairs outside of inline code blocks and fenced code blocks.
 fn count_dollar_pairs(text: &str) -> usize {
     let bytes = text.as_bytes();
     let len = bytes.len();
     let mut pairs = 0;
     let mut in_inline_code = false;
+    let mut in_fenced_code = false;
     let mut i = 0;
 
     while i < len {
+        // Skip escaped characters.
+        if bytes[i] == b'\\' && i + 1 < len {
+            i += 2;
+            continue;
+        }
+        // Track fenced code blocks (```).
+        if i + 2 < len && bytes[i] == b'`' && bytes[i + 1] == b'`' && bytes[i + 2] == b'`' {
+            in_fenced_code = !in_fenced_code;
+            i += 3;
+            continue;
+        }
+        // Skip content inside fenced code blocks.
+        if in_fenced_code {
+            i += 1;
+            continue;
+        }
         if bytes[i] == b'`' && !is_part_of_triple_backtick(text, i) {
             in_inline_code = !in_inline_code;
             i += 1;
@@ -32,12 +49,24 @@ fn count_single_dollars(text: &str) -> usize {
     let len = bytes.len();
     let mut count = 0;
     let mut in_inline_code = false;
+    let mut in_fenced_code = false;
     let mut i = 0;
 
     while i < len {
-        // Skip escaped $.
+        // Skip escaped characters.
         if bytes[i] == b'\\' && i + 1 < len {
             i += 2;
+            continue;
+        }
+        // Track fenced code blocks (```).
+        if i + 2 < len && bytes[i] == b'`' && bytes[i + 1] == b'`' && bytes[i + 2] == b'`' {
+            in_fenced_code = !in_fenced_code;
+            i += 3;
+            continue;
+        }
+        // Skip content inside fenced code blocks.
+        if in_fenced_code {
+            i += 1;
             continue;
         }
         if bytes[i] == b'`' && !is_part_of_triple_backtick(text, i) {
@@ -124,5 +153,28 @@ mod tests {
     #[test]
     fn leaves_complete_inline_katex() {
         assert!(matches!(handle_inline("$x + y$"), Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn ignores_dollar_pairs_inside_fenced_code() {
+        // $$ inside ``` should not be counted as math delimiters.
+        assert!(matches!(
+            handle_block("```\n$$x + y\n```"),
+            Cow::Borrowed(_)
+        ));
+    }
+
+    #[test]
+    fn ignores_escaped_dollar_pairs() {
+        // Escaped \$$ should not be counted.
+        assert!(matches!(handle_block("\\$$x"), Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn ignores_single_dollar_inside_fenced_code() {
+        assert!(matches!(
+            handle_inline("```\n$x + y\n```"),
+            Cow::Borrowed(_)
+        ));
     }
 }
