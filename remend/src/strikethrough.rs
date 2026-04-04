@@ -40,9 +40,6 @@ fn find_half_complete_tilde(text: &str) -> Option<usize> {
                 return Some(i - 1);
             }
         }
-        if i == 0 {
-            break;
-        }
         i -= 1;
     }
     None

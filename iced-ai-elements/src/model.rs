@@ -108,29 +108,74 @@ impl ModelPricing {
     }
 }
 
+/// A pricing table entry mapping a provider prefix and model pattern to pricing.
+struct PricingEntry {
+    prefix: &'static str,
+    model: &'static str,
+    pricing: ModelPricing,
+}
+
+/// Built-in pricing table.
+///
+/// Entries are searched top-to-bottom; the first match wins. An empty `model`
+/// string acts as a provider-level fallback.
+///
+/// Pricing is in USD per 1 million tokens. Rates shown here are approximate
+/// and may become outdated — for production use, override via
+/// [`Context::pricing`](crate::Context::pricing).
+const PRICING_TABLE: &[PricingEntry] = &[
+    // OpenAI
+    PricingEntry { prefix: "openai", model: "gpt-4o-mini", pricing: ModelPricing { input: 0.15, output: 0.6, reasoning: 0.0, cached: 0.0 } },
+    PricingEntry { prefix: "openai", model: "gpt-4o", pricing: ModelPricing { input: 2.5, output: 10.0, reasoning: 0.0, cached: 0.0 } },
+    PricingEntry { prefix: "openai", model: "gpt-4-turbo", pricing: ModelPricing { input: 10.0, output: 30.0, reasoning: 0.0, cached: 0.0 } },
+    PricingEntry { prefix: "openai", model: "gpt-4.1", pricing: ModelPricing { input: 2.0, output: 8.0, reasoning: 0.0, cached: 0.0 } },
+    PricingEntry { prefix: "openai", model: "gpt-4.1-mini", pricing: ModelPricing { input: 0.4, output: 1.6, reasoning: 0.0, cached: 0.0 } },
+    PricingEntry { prefix: "openai", model: "gpt-4.1-nano", pricing: ModelPricing { input: 0.1, output: 0.4, reasoning: 0.0, cached: 0.0 } },
+    PricingEntry { prefix: "openai", model: "o3", pricing: ModelPricing { input: 2.0, output: 8.0, reasoning: 8.0, cached: 0.0 } },
+    PricingEntry { prefix: "openai", model: "o3-mini", pricing: ModelPricing { input: 1.1, output: 4.4, reasoning: 4.4, cached: 0.0 } },
+    PricingEntry { prefix: "openai", model: "o4-mini", pricing: ModelPricing { input: 1.1, output: 4.4, reasoning: 4.4, cached: 0.0 } },
+    PricingEntry { prefix: "openai", model: "", pricing: ModelPricing { input: 0.0, output: 0.0, reasoning: 0.0, cached: 0.0 } },
+    // Anthropic
+    PricingEntry { prefix: "anthropic", model: "claude-opus-4", pricing: ModelPricing { input: 15.0, output: 75.0, reasoning: 0.0, cached: 1.875 } },
+    PricingEntry { prefix: "anthropic", model: "claude-sonnet-4", pricing: ModelPricing { input: 3.0, output: 15.0, reasoning: 0.0, cached: 0.375 } },
+    PricingEntry { prefix: "anthropic", model: "claude-3.5-sonnet", pricing: ModelPricing { input: 3.0, output: 15.0, reasoning: 0.0, cached: 0.375 } },
+    PricingEntry { prefix: "anthropic", model: "claude-3.5-haiku", pricing: ModelPricing { input: 0.8, output: 4.0, reasoning: 0.0, cached: 0.1 } },
+    PricingEntry { prefix: "anthropic", model: "claude-3-opus", pricing: ModelPricing { input: 15.0, output: 75.0, reasoning: 0.0, cached: 1.875 } },
+    PricingEntry { prefix: "anthropic", model: "claude-3-sonnet", pricing: ModelPricing { input: 3.0, output: 15.0, reasoning: 0.0, cached: 0.375 } },
+    PricingEntry { prefix: "anthropic", model: "", pricing: ModelPricing { input: 3.0, output: 15.0, reasoning: 0.0, cached: 0.375 } },
+    // Google
+    PricingEntry { prefix: "google", model: "gemini-2.5-pro", pricing: ModelPricing { input: 1.25, output: 10.0, reasoning: 0.0, cached: 0.315 } },
+    PricingEntry { prefix: "google", model: "gemini-2.5-flash", pricing: ModelPricing { input: 0.15, output: 0.6, reasoning: 0.6, cached: 0.0375 } },
+    PricingEntry { prefix: "google", model: "", pricing: ModelPricing { input: 0.15, output: 0.6, reasoning: 0.0, cached: 0.0 } },
+    PricingEntry { prefix: "gemini", model: "", pricing: ModelPricing { input: 0.15, output: 0.6, reasoning: 0.0, cached: 0.0 } },
+    // Local / free
+    PricingEntry { prefix: "ollama", model: "", pricing: ModelPricing { input: 0.0, output: 0.0, reasoning: 0.0, cached: 0.0 } },
+];
+
 /// Returns the default pricing for a given model ID.
 ///
-/// This provides sensible defaults for common models.
-/// For production use, you may want to maintain your own pricing table.
+/// Looks up pricing from a built-in table of common models. An empty `model`
+/// pattern in the table acts as a provider-level fallback. Returns zero pricing
+/// for completely unknown providers.
+///
+/// For production use, override via [`Context::pricing`](crate::Context::pricing)
+/// or [`ModelPricing::new`].
 pub fn default_pricing(model_id: &ModelId) -> ModelPricing {
-    match model_id.provider {
-        Provider::OpenAi => match model_id.model.as_str() {
-            "gpt-4" => ModelPricing::new(30.0, 60.0, 0.0, 0.0),
-            "gpt-4-turbo" | "gpt-4o" => ModelPricing::new(5.0, 15.0, 0.0, 0.0),
-            "gpt-4o-mini" => ModelPricing::new(0.15, 0.6, 0.0, 0.0),
-            "gpt-3.5-turbo" => ModelPricing::new(0.5, 1.5, 0.0, 0.0),
-            _ => ModelPricing::new(0.0, 0.0, 0.0, 0.0),
-        },
-        Provider::Anthropic => match model_id.model.as_str() {
-            "claude-3-opus" => ModelPricing::new(15.0, 75.0, 0.0, 0.0),
-            "claude-3-sonnet" => ModelPricing::new(3.0, 15.0, 0.0, 0.0),
-            "claude-3.5-sonnet" | "claude-3.5-sonnet-v2" => ModelPricing::new(3.0, 15.0, 0.0, 0.0),
-            "claude-3.5-haiku" => ModelPricing::new(0.8, 4.0, 0.0, 0.0),
-            "claude-3" => ModelPricing::new(0.0, 0.0, 0.0, 0.0), // Legacy, use specific model
-            _ => ModelPricing::new(3.0, 15.0, 0.0, 0.0),
-        },
-        Provider::Google => ModelPricing::new(0.125, 0.5, 0.0, 0.0), // Gemini Pro defaults
-        Provider::Ollama => ModelPricing::new(0.0, 0.0, 0.0, 0.0), // Local, no API cost
-        Provider::Custom => ModelPricing::new(0.0, 0.0, 0.0, 0.0),
+    let prefix = match model_id.provider {
+        Provider::OpenAi => "openai",
+        Provider::Anthropic => "anthropic",
+        Provider::Google => "google",
+        Provider::Ollama => "ollama",
+        Provider::Custom => "",
+    };
+
+    for entry in PRICING_TABLE {
+        if entry.prefix == prefix
+            && (entry.model.is_empty() || model_id.model.starts_with(entry.model))
+        {
+            return entry.pricing;
+        }
     }
+
+    ModelPricing::new(0.0, 0.0, 0.0, 0.0)
 }

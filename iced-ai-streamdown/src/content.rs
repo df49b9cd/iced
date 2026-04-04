@@ -190,8 +190,12 @@ impl StreamContent {
             }
 
             // Must re-create Content since preprocessing may change the full output.
+            // TODO: O(n²) — clones raw_markdown and re-parses from scratch every push.
+            // Consider incremental preprocessing with a suffix window.
             self.inner = markdown::Content::new();
             self.inner.push_str(&text);
+            // Reset since entire Content was rebuilt (block structure may differ).
+            self.previous_item_count = 0;
 
             // Update incomplete block state.
             self.has_incomplete_code_fence =
@@ -207,8 +211,13 @@ impl StreamContent {
         }
 
         // Update text direction (only needs first ~200 chars for the algorithm).
+        let direction_end = self
+            .raw_markdown
+            .char_indices()
+            .nth(200)
+            .map_or(self.raw_markdown.len(), |(idx, _)| idx);
         self.text_direction =
-            remend::detect_direction::detect_text_direction(&self.raw_markdown);
+            remend::detect_direction::detect_text_direction(&self.raw_markdown[..direction_end]);
 
         self.recompute_word_counts();
     }
@@ -257,6 +266,7 @@ impl StreamContent {
 
             self.inner = markdown::Content::new();
             self.inner.push_str(&text);
+            self.previous_item_count = 0;
             self.recompute_word_counts();
         }
         self.is_streaming = false;
@@ -301,7 +311,7 @@ impl StreamContent {
     fn recompute_word_counts(&mut self) {
         let items = self.inner.items();
         let recount_from = if self.previous_item_count > 0 {
-            self.previous_item_count - 1
+            (self.previous_item_count - 1).min(items.len().saturating_sub(1))
         } else {
             0
         };
@@ -321,13 +331,10 @@ impl StreamContent {
     }
 }
 
-/// Public wrapper for word counting in items (used by view.rs for offset tracking).
-pub fn count_words_in_item_public(item: &markdown::Item) -> usize {
-    count_words_in_item(item)
-}
-
 /// Counts words in a markdown item by examining its text content.
-fn count_words_in_item(item: &markdown::Item) -> usize {
+///
+/// Used by the animation system to track global word offsets across blocks.
+pub fn count_words_in_item(item: &markdown::Item) -> usize {
     match item {
         markdown::Item::Heading(_, text) => count_words_in_text(text),
         markdown::Item::Paragraph(text) => count_words_in_text(text),
@@ -345,8 +352,9 @@ fn count_words_in_item(item: &markdown::Item) -> usize {
                 .flat_map(|col| &col.header)
                 .map(count_words_in_item)
                 .sum();
-            // Row cells are not publicly accessible, so estimate based
-            // on the number of rows and columns (roughly 2 words per cell).
+            // TODO: Row cells are not publicly accessible in upstream iced, so
+            // we estimate ~2 words per cell. This causes animation word offsets
+            // to be inaccurate for content after tables with many/few words per cell.
             let row_words = rows.len() * columns.len() * 2;
             header_words + row_words
         }

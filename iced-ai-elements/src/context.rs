@@ -55,12 +55,20 @@ pub fn format_cost(cost: f64) -> String {
 /// The appearance of a [`Context`] widget.
 #[derive(Debug, Clone, Copy)]
 pub struct Style {
+    /// Color for the unfilled portion of the ring/progress bar.
     pub track_color: Color,
+    /// Color for the filled portion of the ring/progress bar.
     pub fill_color: Color,
+    /// Primary text color.
     pub text_color: Color,
+    /// Card and pill background color.
     pub background_color: Color,
+    /// Border color for card and pill.
     pub border_color: Color,
+    /// Secondary/dimmed text color (labels, token counts).
     pub secondary_text_color: Color,
+    /// Background color for the footer section showing total cost.
+    pub footer_background_color: Color,
 }
 
 impl Default for Style {
@@ -72,20 +80,35 @@ impl Default for Style {
             background_color: Color::WHITE,
             border_color: Color::from_rgb(0.85, 0.85, 0.85),
             secondary_text_color: Color::from_rgb(0.45, 0.45, 0.45),
+            footer_background_color: Color::from_rgb(0.965, 0.965, 0.965),
         }
     }
 }
 
-/// Styling trait for the [`Context`] widget.
-pub trait StyleSheet {
-    type Style: Default;
-    fn appearance(&self, style: &Self::Style) -> Style;
+/// Styling catalog for the [`Context`] widget.
+pub trait Catalog {
+    /// The item class of the [`Catalog`].
+    type Class<'a>;
+
+    /// The default class produced by the [`Catalog`].
+    fn default<'a>() -> Self::Class<'a>;
+
+    /// The [`Style`] of a class.
+    fn style(&self, class: &Self::Class<'_>) -> Style;
 }
 
-impl StyleSheet for iced::Theme {
-    type Style = Style;
-    fn appearance(&self, style: &Self::Style) -> Style {
-        *style
+/// A styling function for a [`Context`].
+pub type StyleFn<'a, Theme> = Box<dyn Fn(&Theme) -> Style + 'a>;
+
+impl Catalog for iced::Theme {
+    type Class<'a> = StyleFn<'a, Self>;
+
+    fn default<'a>() -> Self::Class<'a> {
+        Box::new(|_theme| Style::default())
+    }
+
+    fn style(&self, class: &Self::Class<'_>) -> Style {
+        class(self)
     }
 }
 
@@ -147,7 +170,7 @@ const TRIGGER_WIDTH: f32 =
 /// leaves both.
 pub struct Context<'a, Message, Theme = iced::Theme>
 where
-    Theme: StyleSheet,
+    Theme: Catalog,
 {
     max_tokens: u64,
     used_tokens: u64,
@@ -155,13 +178,14 @@ where
     model_id: ModelId,
     pricing: Option<ModelPricing>,
     on_hover: Option<Box<dyn Fn(bool) -> Message + 'a>>,
-    style: Theme::Style,
+    class: Theme::Class<'a>,
 }
 
 impl<'a, Message, Theme> Context<'a, Message, Theme>
 where
-    Theme: StyleSheet,
+    Theme: Catalog,
 {
+    /// Creates a new [`Context`] widget with default values.
     pub fn new() -> Self {
         Self {
             max_tokens: 0,
@@ -170,22 +194,26 @@ where
             model_id: ModelId::parse("custom:unknown"),
             pricing: None,
             on_hover: None,
-            style: Theme::Style::default(),
+            class: Theme::default(),
         }
     }
 
+    /// Sets the maximum token capacity of the context window.
     pub fn max_tokens(mut self, v: u64) -> Self {
         self.max_tokens = v;
         self
     }
+    /// Sets the number of tokens currently used.
     pub fn used_tokens(mut self, v: u64) -> Self {
         self.used_tokens = v;
         self
     }
+    /// Sets the token usage breakdown (input, output, reasoning, cached).
     pub fn usage(mut self, v: Usage) -> Self {
         self.usage = v;
         self
     }
+    /// Sets the model identifier and auto-populates pricing if not set.
     pub fn model_id(mut self, v: &ModelId) -> Self {
         self.model_id = v.clone();
         if self.pricing.is_none() {
@@ -193,16 +221,19 @@ where
         }
         self
     }
+    /// Overrides the model pricing used for cost estimation.
     pub fn pricing(mut self, v: ModelPricing) -> Self {
         self.pricing = Some(v);
         self
     }
+    /// Sets a callback invoked when the hover state changes.
     pub fn on_hover(mut self, f: impl Fn(bool) -> Message + 'a) -> Self {
         self.on_hover = Some(Box::new(f));
         self
     }
-    pub fn style(mut self, s: impl Into<Theme::Style>) -> Self {
-        self.style = s.into();
+    /// Sets the styling class for this widget.
+    pub fn class(mut self, class: impl Into<Theme::Class<'a>>) -> Self {
+        self.class = class.into();
         self
     }
 
@@ -217,7 +248,7 @@ where
 
 impl<'a, Message, Theme> Default for Context<'a, Message, Theme>
 where
-    Theme: StyleSheet,
+    Theme: Catalog,
 {
     fn default() -> Self {
         Self::new()
@@ -231,7 +262,7 @@ where
 impl<'a, Message, Theme> Widget<Message, Theme, Renderer> for Context<'a, Message, Theme>
 where
     Message: 'a,
-    Theme: StyleSheet,
+    Theme: Catalog,
 {
     fn tag(&self) -> tree::Tag {
         tree::Tag::of::<State>()
@@ -272,7 +303,7 @@ where
         let state = tree.state.downcast_ref::<State>();
         let bounds = layout.bounds();
         let percentage = self.percentage();
-        let style = theme.appearance(&self.style);
+        let style = theme.style(&self.class);
         state.cached_style.set(Some(style));
 
         if (state.last_percentage.get() - percentage).abs() > f32::EPSILON {
@@ -374,19 +405,33 @@ where
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
-        if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
-            let state = tree.state.downcast_mut::<State>();
-            let was_open = state.is_open();
-            let over = cursor.position_over(layout.bounds()).is_some();
-            state.trigger_hovered.set(over);
+        match event {
+            Event::Mouse(mouse::Event::CursorMoved { .. }) => {
+                let state = tree.state.downcast_mut::<State>();
+                let was_open = state.is_open();
+                let over = cursor.position_over(layout.bounds()).is_some();
+                state.trigger_hovered.set(over);
 
-            let now_open = state.is_open();
-            if was_open != now_open {
-                shell.invalidate_layout();
-                if let Some(cb) = &self.on_hover {
-                    shell.publish(cb(now_open));
+                let now_open = state.is_open();
+                if was_open != now_open {
+                    shell.invalidate_layout();
+                    if let Some(cb) = &self.on_hover {
+                        shell.publish(cb(now_open));
+                    }
                 }
             }
+            Event::Mouse(mouse::Event::CursorLeft) => {
+                let state = tree.state.downcast_mut::<State>();
+                let was_open = state.is_open();
+                state.trigger_hovered.set(false);
+                if was_open && !state.is_open() {
+                    shell.invalidate_layout();
+                    if let Some(cb) = &self.on_hover {
+                        shell.publish(cb(false));
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
@@ -441,7 +486,7 @@ where
 impl<'a, Message, Theme> From<Context<'a, Message, Theme>> for Element<'a, Message, Theme, Renderer>
 where
     Message: 'a,
-    Theme: StyleSheet + 'a,
+    Theme: Catalog + 'a,
 {
     fn from(ctx: Context<'a, Message, Theme>) -> Self {
         Self::new(ctx)
@@ -467,7 +512,7 @@ const FONT_FOOTER: f32 = 12.0;
 
 struct ContextCard<'a, Message, Theme>
 where
-    Theme: StyleSheet,
+    Theme: Catalog,
 {
     anchor: Point,
     anchor_size: Size,
@@ -483,7 +528,7 @@ where
 
 impl<Message, Theme> ContextCard<'_, Message, Theme>
 where
-    Theme: StyleSheet,
+    Theme: Catalog,
 {
     fn usage_rows(&self) -> Vec<(&'static str, u64, Option<f64>)> {
         let mut rows = Vec::new();
@@ -575,7 +620,7 @@ where
 impl<Message, Theme> iced::advanced::Overlay<Message, Theme, Renderer>
     for ContextCard<'_, Message, Theme>
 where
-    Theme: StyleSheet,
+    Theme: Catalog,
 {
     fn layout(&mut self, _renderer: &Renderer, _bounds: Size) -> layout::Node {
         let h = self.card_height();
@@ -781,7 +826,7 @@ where
             // Footer background (gray, rounded bottom corners)
             let footer_top = y;
             let footer_height = bounds.y + bounds.height - footer_top;
-            let footer_bg = Color::from_rgb(0.965, 0.965, 0.965);
+            let footer_bg = s.footer_background_color;
 
             renderer.fill_quad(
                 renderer::Quad {

@@ -1,3 +1,5 @@
+//! Streaming markdown chat example demonstrating word-level fade-in animation.
+
 use iced::time::{self, Instant, milliseconds};
 use iced::widget::{center_x, column, container, markdown, scrollable, text};
 use iced::window;
@@ -41,6 +43,7 @@ And finally, a table:
 | Caret | Done |
 "#;
 
+/// Entry point for the chat example.
 pub fn main() -> iced::Result {
     iced::application::timed(Chat::new, Chat::update, Chat::subscription, Chat::view)
         .theme(Chat::theme)

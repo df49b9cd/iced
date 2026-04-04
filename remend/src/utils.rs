@@ -26,8 +26,8 @@ pub fn is_list_marker_line(s: &str) -> bool {
         return false;
     }
     i += 1;
-    // Must be followed by at least one space, then only whitespace.
-    if i >= bytes.len() || bytes[i] != b' ' {
+    // Must be followed by at least one space or tab, then only whitespace.
+    if i >= bytes.len() || !matches!(bytes[i], b' ' | b'\t') {
         return false;
     }
     bytes[i..].iter().all(|&b| matches!(b, b' ' | b'\t'))

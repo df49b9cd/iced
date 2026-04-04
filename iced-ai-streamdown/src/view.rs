@@ -193,7 +193,7 @@ where
     let animated_lines = lines.iter().map(|line| {
         let base_spans = line.spans(md.style);
         let animated =
-            viewer::animate_spans_no_caret(&base_spans, animation, word_offset, now);
+            viewer::animate_spans_no_caret(&base_spans, animation, word_offset, now, settings);
         // Count words in this line for offset tracking.
         let line_words: usize = base_spans
             .iter()
@@ -244,20 +244,35 @@ where
     let md = settings.markdown;
     let mut word_offset = global_word_offset;
 
-    let bullet_elements = bullets.iter().enumerate().map(|(i, bullet)| {
+    let is_ordered = start.is_some();
+    let start_num = start.unwrap_or(1);
+    let digits = (start_num + bullets.len().saturating_sub(1) as u64)
+        .max(1)
+        .ilog10()
+        + 1;
+
+    let elements = bullets.iter().enumerate().map(|(i, bullet)| {
         let is_last_bullet = i + 1 == bullets.len();
 
-        let marker: Element<'a, markdown::Uri, Theme, Renderer> = match bullet {
-            markdown::Bullet::Point { .. } => text("•").size(md.text_size).into(),
-            markdown::Bullet::Task { done, .. } => Element::from(
-                container(checkbox(*done).size(md.text_size))
-                    .center_y(text::LineHeight::default().to_absolute(md.text_size)),
-            ),
+        let marker: Element<'a, markdown::Uri, Theme, Renderer> = if is_ordered {
+            text!("{}.", i as u64 + start_num)
+                .size(md.text_size)
+                .align_x(alignment::Horizontal::Right)
+                .width(md.text_size * ((digits as f32 / 2.0).ceil() + 1.0))
+                .into()
+        } else {
+            match bullet {
+                markdown::Bullet::Point { .. } => text("•").size(md.text_size).into(),
+                markdown::Bullet::Task { done, .. } => Element::from(
+                    container(checkbox(*done).size(md.text_size))
+                        .center_y(text::LineHeight::default().to_absolute(md.text_size)),
+                ),
+            }
         };
 
         let items = match bullet {
-                markdown::Bullet::Point { items } | markdown::Bullet::Task { items, .. } => items,
-            };
+            markdown::Bullet::Point { items } | markdown::Bullet::Task { items, .. } => items,
+        };
         let mut inner_settings = settings.clone();
         inner_settings.markdown.spacing = md.spacing * 0.6;
 
@@ -272,8 +287,7 @@ where
                 show_caret && is_last_in_bullet,
                 0,
             );
-            // Advance word offset by the words in this sub-item.
-            word_offset += crate::content::count_words_in_item_public(sub_item);
+            word_offset += crate::content::count_words_in_item(sub_item);
             elem
         }))
         .spacing(inner_settings.markdown.spacing);
@@ -281,53 +295,12 @@ where
         row![marker, inner].spacing(md.spacing).into()
     });
 
-    if start.is_some() {
-        // Ordered list with numbers.
-        let start_num = start.unwrap_or(1);
-        let digits = (start_num + bullets.len() as u64).max(1).ilog10() + 1;
+    let col = column(elements).spacing(md.spacing * 0.75);
 
-        column(bullets.iter().enumerate().map(|(i, bullet)| {
-            let is_last_bullet = i + 1 == bullets.len();
-
-            let items = match bullet {
-                markdown::Bullet::Point { items } | markdown::Bullet::Task { items, .. } => items,
-            };
-            let mut inner_settings = settings.clone();
-            inner_settings.markdown.spacing = md.spacing * 0.6;
-
-            let inner = column(items.iter().enumerate().map(|(j, sub_item)| {
-                let is_last_in_bullet = j + 1 == items.len() && is_last_bullet;
-                let elem = render_animated_item(
-                    sub_item,
-                    &inner_settings,
-                    animation,
-                    word_offset,
-                    now,
-                    show_caret && is_last_in_bullet,
-                    0,
-                );
-                word_offset += crate::content::count_words_in_item_public(sub_item);
-                elem
-            }))
-            .spacing(inner_settings.markdown.spacing);
-
-            row![
-                text!("{}.", i as u64 + start_num)
-                    .size(md.text_size)
-                    .align_x(alignment::Horizontal::Right)
-                    .width(md.text_size * ((digits as f32 / 2.0).ceil() + 1.0)),
-                inner
-            ]
-            .spacing(md.spacing)
-            .into()
-        }))
-        .spacing(md.spacing * 0.75)
-        .into()
+    if is_ordered {
+        col.into()
     } else {
-        column(bullet_elements)
-            .spacing(md.spacing * 0.75)
-            .padding([0.0, md.spacing.0])
-            .into()
+        col.padding([0.0, md.spacing.0]).into()
     }
 }
 
@@ -358,7 +331,7 @@ where
             show_caret && is_last,
             0,
         );
-        word_offset += crate::content::count_words_in_item_public(sub_item);
+        word_offset += crate::content::count_words_in_item(sub_item);
         elem
     }))
     .spacing(md.spacing.0);

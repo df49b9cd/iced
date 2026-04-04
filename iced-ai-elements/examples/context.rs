@@ -8,6 +8,7 @@ use iced_ai_elements::context::Context;
 use iced_ai_elements::model::ModelId;
 use iced_ai_elements::usage::Usage;
 
+/// Entry point for the context widget demo.
 pub fn main() -> iced::Result {
     iced::application(App::new, App::update, App::view)
         .title("Context Widget Demo")

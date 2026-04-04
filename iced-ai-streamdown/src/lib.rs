@@ -42,12 +42,19 @@
 //! - `SlideUp` animation degrades to `FadeIn` (rich text has no per-span vertical offset)
 //! - Table row cells are estimated for word counting (private field in upstream)
 
+/// Word-level animation state for streaming content.
 pub mod animation;
+/// Blinking caret span for the streaming insertion point.
 pub mod caret;
+/// Streaming markdown document with incremental parsing and word tracking.
 pub mod content;
+/// Registry for custom code block renderers.
 pub mod custom_renderer;
+/// Configuration for the streaming markdown renderer.
 pub mod settings;
+/// Rendering functions for streaming markdown with animation.
 pub mod view;
+/// Per-word opacity animation applied to text spans.
 pub mod viewer;
 
 pub use animation::AnimationState;

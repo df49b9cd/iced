@@ -26,8 +26,7 @@ pub use options::{priority, LinkMode, RemendHandler, RemendOptions};
 
 // Re-export utility functions for use by custom handlers.
 pub use utils::{
-    is_inside_code_block as is_within_code_block, is_within_link_or_image_url,
-    is_within_math_block, is_word_char,
+    is_inside_code_block, is_within_link_or_image_url, is_within_math_block, is_word_char,
 };
 
 use std::borrow::Cow;
@@ -108,9 +107,13 @@ pub fn remend<'a>(text: &'a str, options: &RemendOptions) -> Cow<'a, str> {
     }
     if options.links || options.images {
         let link_mode = options.link_mode;
+        let links_enabled = options.links;
+        let images_enabled = options.images;
         let early_return = link_mode == options::LinkMode::Protocol;
         entries.push(HandlerEntry::BuiltIn {
-            handler: Box::new(move |text| link_image::handle(text, link_mode)),
+            handler: Box::new(move |text| {
+                link_image::handle(text, link_mode, links_enabled, images_enabled)
+            }),
             priority: priority::LINKS,
             early_return,
         });
@@ -221,7 +224,11 @@ fn run_builtin_pipeline<'a>(mut result: Cow<'a, str>, options: &RemendOptions) -
     }
     if options.links || options.images {
         let link_mode = options.link_mode;
-        result = apply_with(result, move |text| link_image::handle(text, link_mode));
+        let links_enabled = options.links;
+        let images_enabled = options.images;
+        result = apply_with(result, move |text| {
+            link_image::handle(text, link_mode, links_enabled, images_enabled)
+        });
         if result.ends_with(INCOMPLETE_LINK_MARKER) {
             return result;
         }

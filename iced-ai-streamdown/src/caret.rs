@@ -13,22 +13,23 @@ const CIRCLE_CHAR: &str = "\u{25CF}";
 
 /// Creates a text span representing the streaming caret.
 ///
-/// The caret blinks by toggling its alpha based on wall-clock time.
+/// The caret blinks by toggling its alpha based on the provided `Instant`,
+/// relative to a lazily-initialized epoch.
 pub fn caret_span(
     kind: CaretKind,
     color: Color,
-    _now: Instant,
+    now: Instant,
     blink_interval: Duration,
 ) -> text::Span<'static, Uri> {
+    static EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
     let cycle_ms = blink_interval.as_millis() * 2;
     let visible = if cycle_ms == 0 {
         true
     } else {
-        let since_epoch = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis();
-        (since_epoch % cycle_ms) < blink_interval.as_millis()
+        let epoch = *EPOCH.get_or_init(|| now);
+        let elapsed_ms = now.duration_since(epoch).as_millis();
+        (elapsed_ms % cycle_ms) < blink_interval.as_millis()
     };
 
     let alpha = if visible { color.a } else { 0.0 };

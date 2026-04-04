@@ -69,7 +69,7 @@ pub fn preprocess_custom_tags<'a>(markdown: &'a str, tag_names: &[&str]) -> Cow<
                         ""
                     },
                     close_tag,
-                    "\n\n",
+                    if after.starts_with('\n') { "" } else { "\n\n" },
                 );
                 search_from = padded.len();
                 result = format!("{}{}", padded, after);
@@ -147,23 +147,21 @@ pub fn preprocess_literal_tag_content<'a>(markdown: &'a str, tag_names: &[&str])
 /// Also replaces `\n\n` with `&#10;&#10;` to preserve blank lines.
 fn escape_markdown(text: &str) -> String {
     let mut out = String::with_capacity(text.len() + text.len() / 4);
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
         // Replace \n\n with &#10;&#10;
-        if bytes[i] == b'\n' && i + 1 < bytes.len() && bytes[i + 1] == b'\n' {
+        if ch == '\n' && chars.peek() == Some(&'\n') {
             out.push_str("&#10;&#10;");
-            i += 2;
+            let _ = chars.next();
             continue;
         }
-        match bytes[i] {
-            b'\\' | b'`' | b'*' | b'_' | b'~' | b'[' | b']' | b'|' => {
+        match ch {
+            '\\' | '`' | '*' | '_' | '~' | '[' | ']' | '|' => {
                 out.push('\\');
-                out.push(bytes[i] as char);
+                out.push(ch);
             }
-            _ => out.push(bytes[i] as char),
+            _ => out.push(ch),
         }
-        i += 1;
     }
     out
 }
@@ -337,6 +335,14 @@ mod tests {
         assert_eq!(
             escape_markdown("\\`*_~[]|"),
             "\\\\\\`\\*\\_\\~\\[\\]\\|"
+        );
+    }
+
+    #[test]
+    fn escape_markdown_non_ascii() {
+        assert_eq!(
+            escape_markdown("héllo 世界 **bold**"),
+            "héllo 世界 \\*\\*bold\\*\\*"
         );
     }
 

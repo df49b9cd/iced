@@ -6,6 +6,9 @@ edition.workspace = true
 authors.workspace = true
 license = "Apache-2.0"
 repository.workspace = true
+homepage.workspace = true
+categories.workspace = true
+keywords.workspace = true
 rust-version.workspace = true
 
 [features]
@@ -14,12 +17,16 @@ canvas = ["iced_widget/canvas"]
 wgpu = ["iced_wgpu", "iced_widget/wgpu"]
 
 [dependencies]
+# TODO: Depend on specific sub-crates (iced_core, iced_widget) instead of
+# the umbrella `iced` crate, matching iced's own sub-crate conventions.
 iced = { workspace = true, features = ["advanced"] }
 iced_widget.workspace = true
 iced_graphics.workspace = true
 iced_renderer.workspace = true
-iced_wgpu.workspace = true
-iced_wgpu.optional = true
+iced_wgpu = { workspace = true, optional = true }
 iced_winit.workspace = true
 iced_futures.workspace = true
 serde = { workspace = true, features = ["derive"] }
+
+[lints]
+workspace = true

@@ -32,75 +32,67 @@ fn is_rtl_char(ch: char) -> bool {
 /// Returns [`TextDirection::Rtl`] if the first strong character is RTL,
 /// [`TextDirection::Ltr`] otherwise.
 pub fn detect_text_direction(text: &str) -> TextDirection {
-    // We iterate character-by-character through a simple state machine that
-    // skips markdown syntax. This avoids allocating a stripped copy.
-    let chars: Vec<char> = text.chars().collect();
-    let len = chars.len();
-    let mut i = 0;
+    // Iterate directly over char_indices to avoid allocating a Vec<char>.
+    let bytes = text.as_bytes();
+    let mut iter = text.char_indices().peekable();
 
-    while i < len {
-        let ch = chars[i];
-
+    while let Some((byte_pos, ch)) = iter.next() {
         // Skip heading markers at line start: #{1,6} followed by space.
-        if ch == '#' && is_line_start(&chars, i) {
-            while i < len && chars[i] == '#' {
-                i += 1;
+        if ch == '#' && is_line_start(bytes, byte_pos) {
+            while iter.peek().is_some_and(|(_, c)| *c == '#') {
+                let _ = iter.next();
             }
-            // Skip whitespace after #'s.
-            while i < len && chars[i] == ' ' {
-                i += 1;
+            while iter.peek().is_some_and(|(_, c)| *c == ' ') {
+                let _ = iter.next();
             }
             continue;
         }
 
         // Skip bold/italic markers (*, _).
         if ch == '*' || ch == '_' {
-            i += 1;
             continue;
         }
 
         // Skip inline code: `...`
         if ch == '`' {
-            i += 1;
-            while i < len && chars[i] != '`' {
-                i += 1;
+            while iter.peek().is_some_and(|(_, c)| *c != '`') {
+                let _ = iter.next();
             }
-            if i < len {
-                i += 1; // skip closing `
+            if iter.peek().is_some() {
+                let _ = iter.next(); // skip closing `
             }
             continue;
         }
 
-        // Skip links: [text](url) — keep the text.
-        // When we see `[`, just skip the bracket itself.
+        // Skip links: [text](url) — keep the text, skip the bracket itself.
         if ch == '[' {
-            i += 1;
             continue;
         }
         // When we see `](`, skip through the closing `)`.
-        if ch == ']' && i + 1 < len && chars[i + 1] == '(' {
-            i += 2;
-            while i < len && chars[i] != ')' {
-                i += 1;
-            }
-            if i < len {
-                i += 1; // skip )
-            }
-            continue;
-        }
         if ch == ']' {
-            i += 1;
+            if iter.peek().is_some_and(|(_, c)| *c == '(') {
+                let _ = iter.next(); // skip `(`
+                while iter.peek().is_some_and(|(_, c)| *c != ')') {
+                    let _ = iter.next();
+                }
+                if iter.peek().is_some() {
+                    let _ = iter.next(); // skip `)`
+                }
+                continue;
+            }
             continue;
         }
 
         // Skip line-start markers: >, -, +, digits followed by ., spaces.
-        if is_line_start(&chars, i) && is_list_or_quote_char(ch) {
-            while i < len && (is_list_or_quote_char(chars[i]) || chars[i].is_ascii_digit() || chars[i] == '.') {
-                i += 1;
+        if is_line_start(bytes, byte_pos) && is_list_or_quote_char(ch) {
+            while iter
+                .peek()
+                .is_some_and(|(_, c)| is_list_or_quote_char(*c) || c.is_ascii_digit() || *c == '.')
+            {
+                let _ = iter.next();
             }
-            // Skip trailing spaces.
-            while i < len && chars[i] == ' ' {
-                i += 1;
+            while iter.peek().is_some_and(|(_, c)| *c == ' ') {
+                let _ = iter.next();
             }
             continue;
         }
@@ -112,30 +104,26 @@ pub fn detect_text_direction(text: &str) -> TextDirection {
             }
             return TextDirection::Ltr;
         }
-
-        i += 1;
     }
 
     TextDirection::Ltr
 }
 
-/// Returns true if position `i` is at the start of a line.
-fn is_line_start(chars: &[char], i: usize) -> bool {
-    if i == 0 {
+/// Returns true if `byte_offset` is at the start of a line.
+fn is_line_start(bytes: &[u8], byte_offset: usize) -> bool {
+    if byte_offset == 0 {
         return true;
     }
-    // Check if preceded by newline (possibly with spaces in between).
-    let mut j = i;
+    let mut j = byte_offset;
     while j > 0 {
         j -= 1;
-        if chars[j] == '\n' {
+        if bytes[j] == b'\n' {
             return true;
         }
-        if chars[j] != ' ' && chars[j] != '\t' {
+        if bytes[j] != b' ' && bytes[j] != b'\t' {
             return false;
         }
     }
-    // Reached the start of the string through whitespace only.
     true
 }
 

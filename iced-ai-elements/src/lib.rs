@@ -21,6 +21,6 @@ pub mod context;
 pub mod model;
 pub mod usage;
 
-pub use context::{format_cost, format_tokens, Context, Style, StyleSheet};
+pub use context::{format_cost, format_tokens, Catalog, Context, Style, StyleFn};
 pub use model::{default_pricing, ModelId, ModelPricing, Provider};
 pub use usage::Usage;

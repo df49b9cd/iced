@@ -74,6 +74,10 @@ pub struct StreamSettings {
     pub caret_blink_interval: Duration,
     /// Whether incomplete markdown preprocessing (remend) is enabled.
     pub parse_incomplete_markdown: bool,
+    /// Default text color for animated spans when the theme does not set one.
+    /// Used as a fallback instead of hardcoded white, ensuring visibility on
+    /// light themes.
+    pub text_color: Color,
 }
 
 impl StreamSettings {
@@ -90,6 +94,7 @@ impl StreamSettings {
             caret_color: None,
             caret_blink_interval: Duration::from_millis(530),
             parse_incomplete_markdown: true,
+            text_color: Color::WHITE,
         }
     }
 

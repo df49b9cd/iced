@@ -12,8 +12,10 @@ fn handle_incomplete_url(
     link_mode: LinkMode,
 ) -> Option<Cow<'_, str>> {
     // `bracket_paren_index` points to `]` in `](`.
+    // Only consider `)` on the same line — a `)` later in the document
+    // (e.g., from an emoticon or another link) should not prevent completion.
     let after_paren = &text[bracket_paren_index + 2..];
-    if after_paren.contains(')') {
+    if after_paren.lines().next().unwrap_or("").contains(')') {
         return None; // URL is complete.
     }
 
@@ -146,15 +148,33 @@ fn make_incomplete_link<'a>(text: &str, open_index: usize, link_mode: LinkMode) 
 }
 
 /// Handles incomplete links and images by auto-completing or removing them.
-pub fn handle(text: &str, link_mode: LinkMode) -> Cow<'_, str> {
+///
+/// When `links_enabled` is false, incomplete links are left untouched.
+/// When `images_enabled` is false, incomplete images are left untouched.
+pub fn handle(
+    text: &str,
+    link_mode: LinkMode,
+    links_enabled: bool,
+    images_enabled: bool,
+) -> Cow<'_, str> {
+    if !links_enabled && !images_enabled {
+        return Cow::Borrowed(text);
+    }
+
     let bytes = text.as_bytes();
 
     // Phase 1: Look for `](` pattern — incomplete URL.
     if let Some(pos) = text.rfind("](")
         && !is_inside_code_block(text, pos)
-        && let Some(result) = handle_incomplete_url(text, pos, link_mode)
     {
-        return result;
+        // Check if this is an image (preceded by `![`).
+        let open = find_matching_opening_bracket(text, pos);
+        let is_image = open.is_some_and(|o| o > 0 && text.as_bytes()[o - 1] == b'!');
+        if (is_image && images_enabled) || (!is_image && links_enabled) {
+            if let Some(result) = handle_incomplete_url(text, pos, link_mode) {
+                return result;
+            }
+        }
     }
 
     // Phase 2: Scan backward for unmatched `[`.
@@ -163,9 +183,14 @@ pub fn handle(text: &str, link_mode: LinkMode) -> Cow<'_, str> {
         i -= 1;
         if bytes[i] == b'['
             && !is_inside_code_block(text, i)
-            && let Some(result) = handle_incomplete_text(text, i, link_mode)
         {
-            return result;
+            let is_image = i > 0 && bytes[i - 1] == b'!';
+            if (is_image && !images_enabled) || (!is_image && !links_enabled) {
+                continue;
+            }
+            if let Some(result) = handle_incomplete_text(text, i, link_mode) {
+                return result;
+            }
         }
     }
 
@@ -177,11 +202,11 @@ mod tests {
     use super::*;
 
     fn h(text: &str) -> Cow<'_, str> {
-        handle(text, LinkMode::Protocol)
+        handle(text, LinkMode::Protocol, true, true)
     }
 
     fn h_text_only(text: &str) -> Cow<'_, str> {
-        handle(text, LinkMode::TextOnly)
+        handle(text, LinkMode::TextOnly, true, true)
     }
 
     #[test]
