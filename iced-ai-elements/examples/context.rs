@@ -47,7 +47,7 @@ impl App {
             .on_hover(Message::Hovered);
 
         let status = if self.hovered {
-            "Hover over the pill to see token details"
+            "Showing token details"
         } else {
             "Hover over the pill to see token details"
         };

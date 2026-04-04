@@ -71,7 +71,7 @@ pub fn preprocess_custom_tags<'a>(markdown: &'a str, tag_names: &[&str]) -> Cow<
                     close_tag,
                     "\n\n",
                 );
-                search_from = padded.len() + after.len();
+                search_from = padded.len();
                 result = format!("{}{}", padded, after);
                 changed = true;
             } else {
@@ -195,12 +195,22 @@ pub fn normalize_html_indentation(text: &str) -> Cow<'_, str> {
         }
         first = false;
 
-        // Count leading whitespace.
+        // Count leading whitespace in columns (spaces=1, tabs advance to next multiple of 4).
         let trimmed = line.trim_start_matches(|c: char| c == ' ' || c == '\t');
-        let indent_len = line.len() - trimmed.len();
+        let indent_cols = {
+            let mut col = 0usize;
+            for ch in line[..line.len() - trimmed.len()].chars() {
+                match ch {
+                    ' ' => col += 1,
+                    '\t' => col = (col / 4 + 1) * 4,
+                    _ => break,
+                }
+            }
+            col
+        };
 
-        // If 4+ spaces/tabs of indentation and the rest starts with an HTML tag, strip it.
-        if indent_len >= 4 && starts_with_html_tag_char(trimmed) {
+        // If 4+ columns of indentation and the rest starts with an HTML tag, strip it.
+        if indent_cols >= 4 && starts_with_html_tag_char(trimmed) {
             result.push_str(trimmed);
             changed = true;
         } else {

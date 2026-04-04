@@ -258,13 +258,8 @@ where
         let items = match bullet {
                 markdown::Bullet::Point { items } | markdown::Bullet::Task { items, .. } => items,
             };
-        let inner_settings = StreamSettings {
-            markdown: markdown::Settings {
-                spacing: md.spacing * 0.6,
-                ..md
-            },
-            ..*settings
-        };
+        let mut inner_settings = settings.clone();
+        inner_settings.markdown.spacing = md.spacing * 0.6;
 
         let inner = column(items.iter().enumerate().map(|(j, sub_item)| {
             let is_last_in_bullet = j + 1 == items.len() && is_last_bullet;
@@ -290,7 +285,6 @@ where
         // Ordered list with numbers.
         let start_num = start.unwrap_or(1);
         let digits = (start_num + bullets.len() as u64).max(1).ilog10() + 1;
-        let _ = digits; // used for width calculation in the standard renderer
 
         column(bullets.iter().enumerate().map(|(i, bullet)| {
             let is_last_bullet = i + 1 == bullets.len();
@@ -298,13 +292,8 @@ where
             let items = match bullet {
                 markdown::Bullet::Point { items } | markdown::Bullet::Task { items, .. } => items,
             };
-            let inner_settings = StreamSettings {
-                markdown: markdown::Settings {
-                    spacing: md.spacing * 0.6,
-                    ..md
-                },
-                ..*settings
-            };
+            let mut inner_settings = settings.clone();
+            inner_settings.markdown.spacing = md.spacing * 0.6;
 
             let inner = column(items.iter().enumerate().map(|(j, sub_item)| {
                 let is_last_in_bullet = j + 1 == items.len() && is_last_bullet;
@@ -325,7 +314,8 @@ where
             row![
                 text!("{}.", i as u64 + start_num)
                     .size(md.text_size)
-                    .align_x(alignment::Horizontal::Right),
+                    .align_x(alignment::Horizontal::Right)
+                    .width(md.text_size * ((digits as f32 / 2.0).ceil() + 1.0)),
                 inner
             ]
             .spacing(md.spacing)

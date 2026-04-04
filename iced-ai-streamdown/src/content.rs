@@ -215,14 +215,48 @@ impl StreamContent {
 
     /// Marks the stream as finished.
     ///
-    /// When remend is enabled, performs a final re-parse of the raw markdown
-    /// *without* remend preprocessing (since the complete text should have
-    /// valid syntax).
+    /// Re-parses the raw markdown without remend (the complete text should
+    /// have valid syntax), but still applies the other preprocessing steps
+    /// (HTML normalization, literal tags, custom tags) so the final render
+    /// matches what users saw during streaming.
     pub fn finish(&mut self) {
-        if self.remend_options.is_some() && !self.raw_markdown.is_empty() {
-            // Final parse: use the raw markdown as-is (complete text).
+        let needs_reparse = self.remend_options.is_some()
+            || !self.custom_tags.is_empty()
+            || !self.literal_tags.is_empty()
+            || self.normalize_html;
+
+        if needs_reparse && !self.raw_markdown.is_empty() {
+            let mut text: String = self.raw_markdown.clone();
+
+            // Re-run preprocessing pipeline (skip remend — text is complete).
+            if self.normalize_html {
+                if let std::borrow::Cow::Owned(s) =
+                    remend::preprocess::normalize_html_indentation(&text)
+                {
+                    text = s;
+                }
+            }
+
+            if !self.literal_tags.is_empty() {
+                let tag_refs: Vec<&str> = self.literal_tags.iter().map(|s| s.as_str()).collect();
+                if let std::borrow::Cow::Owned(s) =
+                    remend::preprocess::preprocess_literal_tag_content(&text, &tag_refs)
+                {
+                    text = s;
+                }
+            }
+
+            if !self.custom_tags.is_empty() {
+                let tag_refs: Vec<&str> = self.custom_tags.iter().map(|s| s.as_str()).collect();
+                if let std::borrow::Cow::Owned(s) =
+                    remend::preprocess::preprocess_custom_tags(&text, &tag_refs)
+                {
+                    text = s;
+                }
+            }
+
             self.inner = markdown::Content::new();
-            self.inner.push_str(&self.raw_markdown);
+            self.inner.push_str(&text);
             self.recompute_word_counts();
         }
         self.is_streaming = false;
