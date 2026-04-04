@@ -110,7 +110,7 @@ impl Chat {
                     self.pending = self.pending[chars_to_take..].to_owned();
                     self.content.push_str(&chunk);
 
-                    let new_words = self.content.total_word_count() - prev_words;
+                    let new_words = self.content.total_word_count().saturating_sub(prev_words);
                     self.animation.reveal_words(new_words, now);
                 }
 

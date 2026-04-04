@@ -4,7 +4,7 @@ description = "AI-themed components for iced"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-license.workspace = true
+license = "Apache-2.0"
 repository.workspace = true
 rust-version.workspace = true
 

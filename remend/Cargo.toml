@@ -4,6 +4,6 @@ description = "Streaming markdown preprocessor — auto-completes incomplete syn
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-license.workspace = true
+license = "Apache-2.0"
 repository.workspace = true
 rust-version.workspace = true
