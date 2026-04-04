@@ -69,6 +69,10 @@ pub struct Style {
     pub secondary_text_color: Color,
     /// Background color for the footer section showing total cost.
     pub footer_background_color: Color,
+    /// Font size for the trigger percentage text (default: 13.0).
+    pub trigger_font_size: f32,
+    /// Font size for the card body text rows (default: 11.5).
+    pub card_font_size: f32,
 }
 
 impl Default for Style {
@@ -81,6 +85,8 @@ impl Default for Style {
             border_color: Color::from_rgb(0.85, 0.85, 0.85),
             secondary_text_color: Color::from_rgb(0.45, 0.45, 0.45),
             footer_background_color: Color::from_rgb(0.965, 0.965, 0.965),
+            trigger_font_size: 13.0,
+            card_font_size: 11.5,
         }
     }
 }
@@ -124,6 +130,9 @@ struct State {
     trigger_hovered: Cell<bool>,
     card_hovered: Cell<bool>,
     ring_cache: Cache,
+    /// Style cached during `draw()` and read in `overlay()`. If the theme
+    /// changes between frames, the overlay may show the previous theme's
+    /// colors for a single frame until the next draw+overlay cycle.
     cached_style: Cell<Option<Style>>,
     last_percentage: Cell<f32>,
 }
@@ -168,6 +177,16 @@ const TRIGGER_WIDTH: f32 =
 /// bar, token breakdown, and cost estimation. The card stays visible while the
 /// cursor is over the trigger or the card, and disappears when the cursor
 /// leaves both.
+///
+/// # Minimum viable configuration
+///
+/// ```ignore
+/// Context::new()
+///     .model_id(&ModelId::parse("anthropic:claude-sonnet-4"))
+///     .max_tokens(200_000)
+///     .used_tokens(42_000)
+///     .usage(Usage::new(30_000, 10_000, 0, 2_000))
+/// ```
 pub struct Context<'a, Message, Theme = iced::Theme>
 where
     Theme: Catalog,
@@ -334,7 +353,7 @@ where
                 iced::advanced::text::Text {
                     content: pct_text,
                     bounds: Size::new(TRIGGER_TEXT_WIDTH, bounds.height),
-                    size: Pixels(13.0),
+                    size: Pixels(style.trigger_font_size),
                     line_height: iced::advanced::text::LineHeight::default(),
                     font: renderer.default_font(),
                     align_x: iced::advanced::text::Alignment::Right,
@@ -455,7 +474,7 @@ where
         tree: &'b mut Tree,
         layout: Layout<'_>,
         _renderer: &Renderer,
-        _viewport: &Rectangle,
+        viewport: &Rectangle,
         translation: Vector,
     ) -> Option<iced::advanced::overlay::Element<'b, Message, Theme, Renderer>> {
         let state = tree.state.downcast_ref::<State>();
@@ -464,12 +483,16 @@ where
         }
 
         let bounds = layout.bounds();
+        // NOTE: cached_style may lag one frame behind a theme change. This is
+        // acceptable because the overlay re-renders every frame when open, so
+        // the style is current by the next draw+overlay cycle.
         let style = state.cached_style.get().unwrap_or_default();
 
         Some(iced::advanced::overlay::Element::new(Box::new(
             ContextCard {
                 anchor: Point::new(bounds.x + translation.x, bounds.y + translation.y),
                 anchor_size: bounds.size(),
+                viewport: viewport.size(),
                 style,
                 percentage: self.percentage(),
                 used_tokens: self.used_tokens,
@@ -507,7 +530,6 @@ const ROW_HEIGHT: f32 = 20.0;
 const SECTION_GAP: f32 = 12.0;
 const ROW_GAP: f32 = 2.0;
 const FONT_HEADER: f32 = 12.0;
-const FONT_BODY: f32 = 11.5;
 const FONT_FOOTER: f32 = 12.0;
 
 struct ContextCard<'a, Message, Theme>
@@ -516,6 +538,7 @@ where
 {
     anchor: Point,
     anchor_size: Size,
+    viewport: Size,
     style: Style,
     percentage: f32,
     used_tokens: u64,
@@ -625,9 +648,18 @@ where
     fn layout(&mut self, _renderer: &Renderer, _bounds: Size) -> layout::Node {
         let h = self.card_height();
         let gap = 4.0;
+
+        // Position below the trigger; flip above if it would clip at the bottom.
+        let below_y = self.anchor.y + self.anchor_size.height + gap;
+        let y = if below_y + h > self.viewport.height {
+            (self.anchor.y - h - gap).max(0.0)
+        } else {
+            below_y
+        };
+
         layout::Node::new(Size::new(CARD_WIDTH, h)).translate(Vector::new(
             self.anchor.x,
-            self.anchor.y + self.anchor_size.height + gap,
+            y,
         ))
     }
 
@@ -777,7 +809,7 @@ where
             self.draw_text(
                 renderer,
                 label,
-                Pixels(FONT_BODY),
+                Pixels(s.card_font_size),
                 font,
                 Size::new(cw * 0.4, ROW_HEIGHT),
                 left,
@@ -801,7 +833,7 @@ where
             self.draw_text(
                 renderer,
                 &value_str,
-                Pixels(FONT_BODY),
+                Pixels(s.card_font_size),
                 font,
                 Size::new(cw, ROW_HEIGHT),
                 right,

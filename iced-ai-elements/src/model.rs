@@ -60,6 +60,17 @@ impl ModelId {
         }
     }
 
+    /// Creates a [`ModelId`] directly from a provider and model name.
+    ///
+    /// Use this when the provider is already known, avoiding the string
+    /// parsing overhead of [`ModelId::parse`].
+    pub fn from_parts(provider: Provider, model: impl Into<String>) -> Self {
+        Self {
+            provider,
+            model: model.into(),
+        }
+    }
+
     /// Returns a display string for this model.
     pub fn display(&self) -> String {
         match self.provider {
@@ -271,6 +282,13 @@ mod tests {
         let id = ModelId::parse("openai:gpt-4o-mini");
         let p = default_pricing(&id);
         assert_eq!(p.input, 0.15);
+    }
+
+    #[test]
+    fn from_parts_avoids_parse() {
+        let id = ModelId::from_parts(Provider::OpenAi, "gpt-4");
+        assert_eq!(id.provider, Provider::OpenAi);
+        assert_eq!(id.model, "gpt-4");
     }
 
     #[test]

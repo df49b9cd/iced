@@ -61,6 +61,10 @@ where
         items.len() // nothing to animate
     };
 
+    // Words below the watermark have finished animating (opacity = 1.0) and
+    // can use standard rendering, avoiding per-word String allocations.
+    let watermark = animation.fully_revealed_watermark(now);
+
     let blocks = items.iter().enumerate().map(|(i, item)| {
         let is_last = i + 1 == items.len();
         let needs_animation = is_streaming && i >= changed_from;
@@ -82,6 +86,19 @@ where
 
         if needs_animation {
             let global_offset = content.global_word_offset(i);
+            let block_end = content.global_word_offset(i + 1);
+
+            // Skip per-word animation for blocks where all words are fully
+            // revealed — use standard rendering instead (no String allocations).
+            if block_end <= watermark && !is_last {
+                return markdown::item(
+                    &DefaultViewer,
+                    settings.markdown,
+                    item,
+                    i,
+                );
+            }
+
             let show_caret = is_last;
 
             render_animated_item(

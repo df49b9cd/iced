@@ -133,6 +133,25 @@ impl AnimationState {
         self.word_reveal_times.len()
     }
 
+    /// Returns the global word index up to which all words are fully opaque.
+    ///
+    /// Words at indices `0..watermark` have completed their fade-in animation.
+    /// Blocks whose entire word range falls below this threshold can skip the
+    /// per-word animation path and use standard rendering.
+    pub fn fully_revealed_watermark(&self, now: Instant) -> usize {
+        if matches!(self.kind, AnimationKind::None) {
+            return self.word_reveal_times.len();
+        }
+
+        // word_reveal_times is monotonically non-decreasing (stagger ensures
+        // each successive word has a later or equal reveal time). Binary search
+        // for the first word that hasn't finished animating.
+        self.word_reveal_times.partition_point(|reveal_time| {
+            now.checked_duration_since(*reveal_time)
+                .is_some_and(|elapsed| elapsed >= self.duration)
+        })
+    }
+
     /// Resets all animation state.
     pub fn clear(&mut self) {
         self.word_reveal_times.clear();
@@ -268,5 +287,51 @@ mod tests {
         let state = AnimationState::from_settings(&settings);
         assert_eq!(state.duration, Duration::from_millis(500));
         assert_eq!(state.stagger, Duration::from_millis(50));
+    }
+
+    #[test]
+    fn fully_revealed_watermark_empty() {
+        let state = AnimationState::new(AnimationKind::FadeIn);
+        assert_eq!(state.fully_revealed_watermark(now()), 0);
+    }
+
+    #[test]
+    fn fully_revealed_watermark_none_animation() {
+        let mut state = AnimationState::new(AnimationKind::None);
+        state.reveal_words(5, now());
+        assert_eq!(state.fully_revealed_watermark(now()), 5);
+    }
+
+    #[test]
+    fn fully_revealed_watermark_all_done() {
+        let mut state = AnimationState::new(AnimationKind::FadeIn)
+            .duration(Duration::from_millis(100))
+            .stagger(Duration::from_millis(10));
+        let t = now();
+        state.reveal_words(10, t);
+        // All 10 words done: last reveal at t+90ms, finishes at t+190ms
+        assert_eq!(state.fully_revealed_watermark(t + Duration::from_millis(200)), 10);
+    }
+
+    #[test]
+    fn fully_revealed_watermark_partial() {
+        let mut state = AnimationState::new(AnimationKind::FadeIn)
+            .duration(Duration::from_millis(100))
+            .stagger(Duration::from_millis(10));
+        let t = now();
+        state.reveal_words(10, t);
+        // Word 0 revealed at t+0, finishes at t+100. Word 1 at t+10, finishes t+110.
+        // At t+105: word 0 done, word 1 not done.
+        assert_eq!(state.fully_revealed_watermark(t + Duration::from_millis(105)), 1);
+    }
+
+    #[test]
+    fn fully_revealed_watermark_none_done() {
+        let mut state = AnimationState::new(AnimationKind::FadeIn)
+            .duration(Duration::from_millis(100));
+        let t = now();
+        state.reveal_words(5, t);
+        // At t+50: no words finished (first finishes at t+100)
+        assert_eq!(state.fully_revealed_watermark(t + Duration::from_millis(50)), 0);
     }
 }
