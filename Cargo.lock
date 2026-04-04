@@ -2286,6 +2286,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "iced_ai_elements"
+version = "0.15.0-dev"
+dependencies = [
+ "iced",
+ "iced_futures",
+ "iced_graphics",
+ "iced_renderer",
+ "iced_wgpu",
+ "iced_widget",
+ "iced_winit",
+ "serde",
+]
+
+[[package]]
+name = "iced_ai_streamdown"
+version = "0.15.0-dev"
+dependencies = [
+ "iced",
+ "iced_widget",
+ "lilt",
+ "remend",
+ "tokio",
+]
+
+[[package]]
 name = "iced_beacon"
 version = "0.15.0-dev"
 dependencies = [
@@ -4829,6 +4854,10 @@ name = "regex-syntax"
 version = "0.8.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
+
+[[package]]
+name = "remend"
+version = "0.15.0-dev"
 
 [[package]]
 name = "renderdoc-sys"

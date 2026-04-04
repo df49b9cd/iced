@@ -143,7 +143,12 @@ members = [
     "futures",
     "graphics",
     "highlighter",
+    # NOTE: These directories use hyphens while most iced crates use underscores
+    # (e.g., tiny_skia/). Consider renaming in a follow-up PR.
+    "iced-ai-elements",
+    "iced-ai-streamdown",
     "program",
+    "remend",
     "renderer",
     "runtime",
     "selector",
@@ -186,6 +191,9 @@ iced_tiny_skia = { version = "0.15.0-dev", path = "tiny_skia", default-features 
 iced_wgpu = { version = "0.15.0-dev", path = "wgpu", default-features = false }
 iced_widget = { version = "0.15.0-dev", path = "widget" }
 iced_winit = { version = "0.15.0-dev", path = "winit", default-features = false }
+iced_ai_elements = { version = "0.15.0-dev", path = "iced-ai-elements" }
+iced_ai_streamdown = { version = "0.15.0-dev", path = "iced-ai-streamdown" }
+remend = { version = "0.15.0-dev", path = "remend" }
 
 arboard = { version = "3.6", default-features = false }
 bincode = "1.3"

@@ -1,0 +1,15 @@
+[package]
+name = "remend"
+description = "Streaming markdown preprocessor — auto-completes incomplete syntax during token-by-token streaming"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+# Apache-2.0: port of Vercel's Streamdown (Apache-2.0). Workspace uses MIT.
+license = "Apache-2.0"
+repository.workspace = true
+homepage.workspace = true
+categories.workspace = true
+keywords.workspace = true
+rust-version.workspace = true
+[lints]
+workspace = true
