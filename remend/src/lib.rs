@@ -18,13 +18,23 @@ mod setext_heading;
 mod single_tilde;
 mod strikethrough;
 
-pub mod detect_direction;
-pub mod incomplete_code;
-pub mod preprocess;
+mod detect_direction;
+mod incomplete_code;
+mod preprocess;
 
 pub use options::{priority, LinkMode, RemendHandler, RemendOptions};
 
+// Re-export public items from internal modules.
+pub use detect_direction::{detect_text_direction, TextDirection};
+pub use incomplete_code::{has_incomplete_code_fence, has_table};
+pub use preprocess::{
+    normalize_html_indentation, preprocess_custom_tags, preprocess_literal_tag_content,
+};
+
 // Re-export utility functions for use by custom handlers.
+// These four are the most commonly needed when implementing `RemendHandler`:
+// code block detection, link/image URL detection, math block detection, and
+// word character classification.
 pub use utils::{
     is_inside_code_block, is_within_link_or_image_url, is_within_math_block, is_word_char,
 };

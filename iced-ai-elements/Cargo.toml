@@ -4,6 +4,7 @@ description = "AI-themed components for iced"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
+# Apache-2.0: port of Vercel's Streamdown (Apache-2.0). Workspace uses MIT.
 license = "Apache-2.0"
 repository.workspace = true
 homepage.workspace = true
@@ -12,13 +13,19 @@ keywords.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["canvas", "wgpu"]
+default = ["canvas", "wgpu", "serde"]
 canvas = ["iced_widget/canvas"]
 wgpu = ["iced_wgpu", "iced_widget/wgpu"]
+serde = ["dep:serde"]
 
 [dependencies]
-# TODO: Depend on specific sub-crates (iced_core, iced_widget) instead of
-# the umbrella `iced` crate, matching iced's own sub-crate conventions.
+# TODO: Replace umbrella `iced` with specific sub-crates:
+#   iced_core -> Color, Element, Length, Size, Point, Rectangle, Vector, Pixels,
+#                Radians, alignment, Border, Shadow, mouse, Event,
+#                advanced::{layout, renderer, widget::tree, Layout, Shell, Widget}
+#   iced_widget -> canvas (behind "canvas" feature)
+#   iced_renderer -> Renderer type
+# The umbrella re-exports iced::advanced which maps to iced_core internals.
 iced = { workspace = true, features = ["advanced"] }
 iced_widget.workspace = true
 iced_graphics.workspace = true
@@ -26,7 +33,7 @@ iced_renderer.workspace = true
 iced_wgpu = { workspace = true, optional = true }
 iced_winit.workspace = true
 iced_futures.workspace = true
-serde = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive"], optional = true }
 
 [lints]
 workspace = true

@@ -68,6 +68,9 @@ pub mod priority {
 ///
 /// All options default to `true` (enabled) except `inline_katex` which
 /// defaults to `false` (single `$` is ambiguous with currency symbols).
+///
+/// Fields are public for direct construction; the builder methods are provided
+/// as a convenience for chained configuration.
 pub struct RemendOptions {
     /// Complete bold formatting (`**text` → `**text**`).
     pub bold: bool,

@@ -21,6 +21,8 @@ pub fn caret_span(
     now: Instant,
     blink_interval: Duration,
 ) -> text::Span<'static, Uri> {
+    // Global blink epoch shared across all caret instances so multiple
+    // streaming messages blink in sync. Initialized on first use.
     static EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 
     let cycle_ms = blink_interval.as_millis() * 2;

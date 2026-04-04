@@ -1,7 +1,7 @@
 use iced::widget::markdown;
 
 use remend::RemendOptions;
-use remend::detect_direction::TextDirection;
+use remend::TextDirection;
 
 /// A streaming markdown document that tracks changes across incremental updates.
 ///
@@ -157,7 +157,7 @@ impl StreamContent {
 
             // 0. Normalize HTML indentation: strip 4+ spaces before HTML tags.
             if self.normalize_html {
-                let result = remend::preprocess::normalize_html_indentation(&text);
+                let result = remend::normalize_html_indentation(&text);
                 if let std::borrow::Cow::Owned(s) = result {
                     text = s;
                 }
@@ -174,7 +174,7 @@ impl StreamContent {
             // 2. Literal tag content: escape markdown inside specified tags.
             if !self.literal_tags.is_empty() {
                 let tag_refs: Vec<&str> = self.literal_tags.iter().map(|s| s.as_str()).collect();
-                let result = remend::preprocess::preprocess_literal_tag_content(&text, &tag_refs);
+                let result = remend::preprocess_literal_tag_content(&text, &tag_refs);
                 if let std::borrow::Cow::Owned(s) = result {
                     text = s;
                 }
@@ -183,31 +183,37 @@ impl StreamContent {
             // 3. Custom tags: prevent blank-line block splitting.
             if !self.custom_tags.is_empty() {
                 let tag_refs: Vec<&str> = self.custom_tags.iter().map(|s| s.as_str()).collect();
-                let result = remend::preprocess::preprocess_custom_tags(&text, &tag_refs);
+                let result = remend::preprocess_custom_tags(&text, &tag_refs);
                 if let std::borrow::Cow::Owned(s) = result {
                     text = s;
                 }
             }
 
-            // Must re-create Content since preprocessing may change the full output.
-            // TODO: O(n²) — clones raw_markdown and re-parses from scratch every push.
-            // Consider incremental preprocessing with a suffix window.
-            self.inner = markdown::Content::new();
-            self.inner.push_str(&text);
-            // Reset since entire Content was rebuilt (block structure may differ).
-            self.previous_item_count = 0;
+            // If preprocessing didn't change anything, use incremental push
+            // instead of full re-parse. This avoids the O(n²) cost for
+            // well-formed markdown where remend returns the input unchanged.
+            // TODO: For the changed case, consider incremental preprocessing
+            // with a suffix window to avoid full re-parse.
+            if text == self.raw_markdown {
+                self.inner.push_str(markdown);
+            } else {
+                self.inner = markdown::Content::new();
+                self.inner.push_str(&text);
+                // Reset since entire Content was rebuilt (block structure may differ).
+                self.previous_item_count = 0;
+            }
 
             // Update incomplete block state.
             self.has_incomplete_code_fence =
-                remend::incomplete_code::has_incomplete_code_fence(&self.raw_markdown);
-            self.has_table = remend::incomplete_code::has_table(&self.raw_markdown);
+                remend::has_incomplete_code_fence(&self.raw_markdown);
+            self.has_table = remend::has_table(&self.raw_markdown);
         } else {
             self.raw_markdown.push_str(markdown);
             self.inner.push_str(markdown);
 
             self.has_incomplete_code_fence =
-                remend::incomplete_code::has_incomplete_code_fence(&self.raw_markdown);
-            self.has_table = remend::incomplete_code::has_table(&self.raw_markdown);
+                remend::has_incomplete_code_fence(&self.raw_markdown);
+            self.has_table = remend::has_table(&self.raw_markdown);
         }
 
         // Update text direction (only needs first ~200 chars for the algorithm).
@@ -217,7 +223,7 @@ impl StreamContent {
             .nth(200)
             .map_or(self.raw_markdown.len(), |(idx, _)| idx);
         self.text_direction =
-            remend::detect_direction::detect_text_direction(&self.raw_markdown[..direction_end]);
+            remend::detect_text_direction(&self.raw_markdown[..direction_end]);
 
         self.recompute_word_counts();
     }
@@ -240,7 +246,7 @@ impl StreamContent {
             // Re-run preprocessing pipeline (skip remend — text is complete).
             if self.normalize_html {
                 if let std::borrow::Cow::Owned(s) =
-                    remend::preprocess::normalize_html_indentation(&text)
+                    remend::normalize_html_indentation(&text)
                 {
                     text = s;
                 }
@@ -249,7 +255,7 @@ impl StreamContent {
             if !self.literal_tags.is_empty() {
                 let tag_refs: Vec<&str> = self.literal_tags.iter().map(|s| s.as_str()).collect();
                 if let std::borrow::Cow::Owned(s) =
-                    remend::preprocess::preprocess_literal_tag_content(&text, &tag_refs)
+                    remend::preprocess_literal_tag_content(&text, &tag_refs)
                 {
                     text = s;
                 }
@@ -258,7 +264,7 @@ impl StreamContent {
             if !self.custom_tags.is_empty() {
                 let tag_refs: Vec<&str> = self.custom_tags.iter().map(|s| s.as_str()).collect();
                 if let std::borrow::Cow::Owned(s) =
-                    remend::preprocess::preprocess_custom_tags(&text, &tag_refs)
+                    remend::preprocess_custom_tags(&text, &tag_refs)
                 {
                     text = s;
                 }
@@ -372,10 +378,9 @@ fn count_words_in_bullet(bullet: &markdown::Bullet) -> usize {
 /// Counts words in a [`markdown::Text`] by getting its raw span text content.
 ///
 /// We use the spans API with a dummy style since we only need the text content.
-/// The style doesn't affect the text itself, just the formatting.
+/// The style only affects visual attributes (colors, fonts) — the text content
+/// returned by `spans()` is identical regardless of which style is passed.
 fn count_words_in_text(text: &markdown::Text) -> usize {
-    // We access the text via the public spans API.
-    // Use a default style — the text content is style-independent.
     use iced::theme::palette::Seed;
     let style = markdown::Style::from_palette(Seed::CATPPUCCIN_MOCHA);
     let spans = text.spans(style);

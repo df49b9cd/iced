@@ -2,11 +2,12 @@ use std::borrow::Cow;
 
 use super::utils::{count_single_backticks, cow_append};
 
-/// Returns `true` if the text is inside an incomplete fenced code block
-/// (odd number of ``` sequences).
+/// Returns `true` if the text is inside an incomplete fenced code block.
+///
+/// Delegates to the CommonMark-aware fence parser which handles both
+/// backtick and tilde fences with proper length matching.
 fn is_inside_incomplete_code_block(text: &str) -> bool {
-    let count = text.matches("```").count();
-    count % 2 == 1
+    crate::incomplete_code::has_incomplete_code_fence(text)
 }
 
 /// Handles inline triple backticks on a single line (not a fence).

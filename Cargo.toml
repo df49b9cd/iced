@@ -143,6 +143,8 @@ members = [
     "futures",
     "graphics",
     "highlighter",
+    # NOTE: These directories use hyphens while most iced crates use underscores
+    # (e.g., tiny_skia/). Consider renaming in a follow-up PR.
     "iced-ai-elements",
     "iced-ai-streamdown",
     "program",

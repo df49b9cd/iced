@@ -54,6 +54,13 @@ pub fn is_inside_code_block(text: &str, position: usize) -> bool {
             i += 3;
             continue;
         }
+        // Check for triple tildes (CommonMark also allows ~~~ fences).
+        if i + 2 < bytes.len() && bytes[i] == b'~' && bytes[i + 1] == b'~' && bytes[i + 2] == b'~'
+        {
+            in_code_block = !in_code_block;
+            i += 3;
+            continue;
+        }
         // Only check for inline code if not in multiline code.
         if !in_code_block && bytes[i] == b'`' {
             in_inline_code = !in_inline_code;
@@ -336,7 +343,7 @@ pub fn find_matching_closing_bracket(text: &str, open_index: usize) -> Option<us
 }
 
 /// Helper: make an owned Cow by appending a suffix.
-pub fn cow_append<'a>(text: &str, suffix: &str) -> Cow<'a, str> {
+pub(crate) fn cow_append<'a>(text: &str, suffix: &str) -> Cow<'a, str> {
     let mut s = String::with_capacity(text.len() + suffix.len());
     s.push_str(text);
     s.push_str(suffix);

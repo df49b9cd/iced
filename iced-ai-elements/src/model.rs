@@ -1,9 +1,8 @@
 //! AI Model identification and pricing
 
-use serde::{Deserialize, Serialize};
-
 /// AI model provider
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Provider {
     /// OpenAI models (e.g., gpt-4, gpt-4-turbo)
     OpenAi,
@@ -36,7 +35,8 @@ impl Provider {
 /// A parsed model identifier.
 ///
 /// Contains the provider and model name extracted from a string like "openai:gpt-4".
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ModelId {
     /// The provider (e.g., OpenAI, Anthropic)
     pub provider: Provider,
@@ -79,7 +79,8 @@ impl std::fmt::Display for ModelId {
 }
 
 /// Pricing information for a model (cost per 1 million tokens).
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ModelPricing {
     /// Cost per 1M input tokens (in USD)
     pub input: f64,
@@ -115,25 +116,28 @@ struct PricingEntry {
     pricing: ModelPricing,
 }
 
-/// Built-in pricing table.
+/// Built-in pricing table (last updated: 2026-04).
 ///
 /// Entries are searched top-to-bottom; the first match wins. An empty `model`
 /// string acts as a provider-level fallback.
+///
+/// IMPORTANT: more-specific patterns (e.g., "gpt-4.1-mini") MUST appear before
+/// shorter prefixes ("gpt-4.1") because matching uses `starts_with`.
 ///
 /// Pricing is in USD per 1 million tokens. Rates shown here are approximate
 /// and may become outdated — for production use, override via
 /// [`Context::pricing`](crate::Context::pricing).
 const PRICING_TABLE: &[PricingEntry] = &[
-    // OpenAI
+    // OpenAI — longer model names before shorter prefixes
     PricingEntry { prefix: "openai", model: "gpt-4o-mini", pricing: ModelPricing { input: 0.15, output: 0.6, reasoning: 0.0, cached: 0.0 } },
     PricingEntry { prefix: "openai", model: "gpt-4o", pricing: ModelPricing { input: 2.5, output: 10.0, reasoning: 0.0, cached: 0.0 } },
     PricingEntry { prefix: "openai", model: "gpt-4-turbo", pricing: ModelPricing { input: 10.0, output: 30.0, reasoning: 0.0, cached: 0.0 } },
-    PricingEntry { prefix: "openai", model: "gpt-4.1", pricing: ModelPricing { input: 2.0, output: 8.0, reasoning: 0.0, cached: 0.0 } },
-    PricingEntry { prefix: "openai", model: "gpt-4.1-mini", pricing: ModelPricing { input: 0.4, output: 1.6, reasoning: 0.0, cached: 0.0 } },
     PricingEntry { prefix: "openai", model: "gpt-4.1-nano", pricing: ModelPricing { input: 0.1, output: 0.4, reasoning: 0.0, cached: 0.0 } },
-    PricingEntry { prefix: "openai", model: "o3", pricing: ModelPricing { input: 2.0, output: 8.0, reasoning: 8.0, cached: 0.0 } },
+    PricingEntry { prefix: "openai", model: "gpt-4.1-mini", pricing: ModelPricing { input: 0.4, output: 1.6, reasoning: 0.0, cached: 0.0 } },
+    PricingEntry { prefix: "openai", model: "gpt-4.1", pricing: ModelPricing { input: 2.0, output: 8.0, reasoning: 0.0, cached: 0.0 } },
     PricingEntry { prefix: "openai", model: "o3-mini", pricing: ModelPricing { input: 1.1, output: 4.4, reasoning: 4.4, cached: 0.0 } },
     PricingEntry { prefix: "openai", model: "o4-mini", pricing: ModelPricing { input: 1.1, output: 4.4, reasoning: 4.4, cached: 0.0 } },
+    PricingEntry { prefix: "openai", model: "o3", pricing: ModelPricing { input: 2.0, output: 8.0, reasoning: 8.0, cached: 0.0 } },
     PricingEntry { prefix: "openai", model: "", pricing: ModelPricing { input: 0.0, output: 0.0, reasoning: 0.0, cached: 0.0 } },
     // Anthropic
     PricingEntry { prefix: "anthropic", model: "claude-opus-4", pricing: ModelPricing { input: 15.0, output: 75.0, reasoning: 0.0, cached: 1.875 } },
@@ -178,4 +182,135 @@ pub fn default_pricing(model_id: &ModelId) -> ModelPricing {
     }
 
     ModelPricing::new(0.0, 0.0, 0.0, 0.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::{format_cost, format_tokens};
+
+    // --- format_tokens ---
+
+    #[test]
+    fn format_tokens_small() {
+        assert_eq!(format_tokens(0), "0");
+        assert_eq!(format_tokens(999), "999");
+    }
+
+    #[test]
+    fn format_tokens_thousands() {
+        assert_eq!(format_tokens(1_000), "1K");
+        assert_eq!(format_tokens(1_500), "1.5K");
+        assert_eq!(format_tokens(32_000), "32K");
+    }
+
+    #[test]
+    fn format_tokens_boundary() {
+        // 999_999 is < 1M so enters K branch
+        assert_eq!(format_tokens(999_999), "1000.0K");
+    }
+
+    #[test]
+    fn format_tokens_millions() {
+        assert_eq!(format_tokens(1_000_000), "1.0M");
+        assert_eq!(format_tokens(128_000_000), "128.0M");
+    }
+
+    #[test]
+    fn format_tokens_billions() {
+        assert_eq!(format_tokens(1_000_000_000), "1.0B");
+    }
+
+    // --- format_cost ---
+
+    #[test]
+    fn format_cost_small() {
+        assert_eq!(format_cost(0.001), "$0.0010");
+    }
+
+    #[test]
+    fn format_cost_normal() {
+        assert_eq!(format_cost(1.50), "$1.50");
+        assert_eq!(format_cost(0.04), "$0.04");
+    }
+
+    // --- ModelId::parse ---
+
+    #[test]
+    fn parse_openai() {
+        let id = ModelId::parse("openai:gpt-4");
+        assert_eq!(id.provider, Provider::OpenAi);
+        assert_eq!(id.model, "gpt-4");
+    }
+
+    #[test]
+    fn parse_anthropic() {
+        let id = ModelId::parse("anthropic:claude-3.5-sonnet");
+        assert_eq!(id.provider, Provider::Anthropic);
+        assert_eq!(id.model, "claude-3.5-sonnet");
+    }
+
+    #[test]
+    fn parse_no_colon() {
+        let id = ModelId::parse("llama2");
+        assert_eq!(id.provider, Provider::Custom);
+        assert_eq!(id.model, "llama2");
+    }
+
+    #[test]
+    fn parse_with_extra_colons() {
+        let id = ModelId::parse("openai:gpt-4:latest");
+        assert_eq!(id.provider, Provider::OpenAi);
+        assert_eq!(id.model, "gpt-4:latest");
+    }
+
+    // --- default_pricing ---
+
+    #[test]
+    fn pricing_gpt4o_mini() {
+        let id = ModelId::parse("openai:gpt-4o-mini");
+        let p = default_pricing(&id);
+        assert_eq!(p.input, 0.15);
+    }
+
+    #[test]
+    fn pricing_gpt41_mini_not_gpt41() {
+        let id = ModelId::parse("openai:gpt-4.1-mini");
+        let p = default_pricing(&id);
+        assert_eq!(p.input, 0.4); // must NOT match gpt-4.1's $2.0
+    }
+
+    #[test]
+    fn pricing_gpt41_nano() {
+        let id = ModelId::parse("openai:gpt-4.1-nano");
+        let p = default_pricing(&id);
+        assert_eq!(p.input, 0.1);
+    }
+
+    #[test]
+    fn pricing_o3_mini_not_o3() {
+        let id = ModelId::parse("openai:o3-mini");
+        let p = default_pricing(&id);
+        assert_eq!(p.input, 1.1); // must NOT match o3's $2.0
+    }
+
+    #[test]
+    fn pricing_unknown_provider() {
+        let id = ModelId::parse("custom:mystery-model");
+        let p = default_pricing(&id);
+        assert_eq!(p.input, 0.0);
+    }
+
+    // --- ModelPricing::calculate_cost ---
+
+    #[test]
+    fn calculate_cost_basic() {
+        let pricing = ModelPricing::new(3.0, 15.0, 0.0, 0.375);
+        let usage = crate::Usage::new(50_000, 30_000, 0, 10_000);
+        let cost = pricing.calculate_cost(&usage);
+        let expected = (50_000.0 / 1e6) * 3.0
+            + (30_000.0 / 1e6) * 15.0
+            + (10_000.0 / 1e6) * 0.375;
+        assert!((cost - expected).abs() < 1e-10);
+    }
 }

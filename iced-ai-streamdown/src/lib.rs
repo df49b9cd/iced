@@ -59,12 +59,17 @@ pub mod viewer;
 
 pub use animation::AnimationState;
 pub use content::StreamContent;
-pub use settings::{AnimationKind, AnimationSep, CaretKind, EasingFunction};
+pub use settings::{AnimationKind, AnimationSep, CaretKind};
 pub use custom_renderer::{CustomBlockRenderer, CustomRendererRegistry};
-pub use remend::detect_direction::TextDirection;
+/// Re-exported from [`remend`] for convenience. Users should depend on
+/// `iced_ai_streamdown` rather than on `remend` directly — the version
+/// is kept in sync within the workspace.
+pub use remend::TextDirection;
 pub use remend::{LinkMode, RemendHandler, RemendOptions};
 pub use settings::StreamSettings;
 pub use view::{stream_view, stream_view_with_renderers};
 
 // Re-export types from iced that users will commonly need alongside this crate.
+// These are workspace-version-coupled: if upstream iced changes these types,
+// both iced and this crate must be updated in lockstep.
 pub use iced::widget::markdown::{self, Item, Uri};

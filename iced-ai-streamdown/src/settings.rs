@@ -27,20 +27,6 @@ pub enum CaretKind {
     Circle,
 }
 
-/// The easing function used for animation.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub enum EasingFunction {
-    /// Linear interpolation.
-    Linear,
-    /// Ease in (slow start).
-    EaseIn,
-    /// Ease out (slow end).
-    #[default]
-    EaseOut,
-    /// Ease in and out (slow start and end).
-    EaseInOut,
-}
-
 /// Whether animation is applied word-by-word or character-by-character.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AnimationSep {
@@ -62,8 +48,6 @@ pub struct StreamSettings {
     pub animation_duration: Duration,
     /// Delay between each word's animation start.
     pub animation_stagger: Duration,
-    /// The easing function for animation transitions.
-    pub animation_easing: EasingFunction,
     /// Whether to animate word-by-word or character-by-character.
     pub animation_sep: AnimationSep,
     /// The caret to show at the insertion point, if any.
@@ -75,8 +59,8 @@ pub struct StreamSettings {
     /// Whether incomplete markdown preprocessing (remend) is enabled.
     pub parse_incomplete_markdown: bool,
     /// Default text color for animated spans when the theme does not set one.
-    /// Used as a fallback instead of hardcoded white, ensuring visibility on
-    /// light themes.
+    /// Override this when using a light theme — the dark default (`0x20`)
+    /// ensures visibility on most backgrounds.
     pub text_color: Color,
 }
 
@@ -88,13 +72,12 @@ impl StreamSettings {
             animation: AnimationKind::FadeIn,
             animation_duration: Duration::from_millis(300),
             animation_stagger: Duration::from_millis(30),
-            animation_easing: EasingFunction::default(),
             animation_sep: AnimationSep::default(),
             caret: Some(CaretKind::Block),
             caret_color: None,
             caret_blink_interval: Duration::from_millis(530),
             parse_incomplete_markdown: true,
-            text_color: Color::WHITE,
+            text_color: Color::from_rgb(0.125, 0.125, 0.125),
         }
     }
 
@@ -131,12 +114,6 @@ impl StreamSettings {
     /// Sets the caret blink interval.
     pub fn caret_blink_interval(mut self, interval: Duration) -> Self {
         self.caret_blink_interval = interval;
-        self
-    }
-
-    /// Sets the animation easing function.
-    pub fn animation_easing(mut self, easing: EasingFunction) -> Self {
-        self.animation_easing = easing;
         self
     }
 

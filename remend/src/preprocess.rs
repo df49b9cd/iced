@@ -10,6 +10,11 @@ use std::borrow::Cow;
 ///
 /// For each registered tag name, replaces `\n\n` inside the tag with
 /// `\n<!---->\n` (HTML comment that acts as a spacer without splitting).
+///
+/// # Limitations
+///
+/// Nested instances of the same tag name are not supported — only the
+/// outermost `<tag>...</tag>` pair is processed per tag name.
 pub fn preprocess_custom_tags<'a>(markdown: &'a str, tag_names: &[&str]) -> Cow<'a, str> {
     if tag_names.is_empty() || markdown.is_empty() {
         return Cow::Borrowed(markdown);

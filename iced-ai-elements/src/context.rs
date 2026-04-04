@@ -907,10 +907,16 @@ where
         _renderer: &Renderer,
         _shell: &mut Shell<'_, Message>,
     ) {
-        // Track whether cursor is over the card
-        if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
-            let over_card = cursor.position_over(layout.bounds()).is_some();
-            self.card_hovered.set(over_card);
+        // Track whether cursor is over the card.
+        match event {
+            Event::Mouse(mouse::Event::CursorMoved { .. }) => {
+                let over_card = cursor.position_over(layout.bounds()).is_some();
+                self.card_hovered.set(over_card);
+            }
+            Event::Mouse(mouse::Event::CursorLeft) => {
+                self.card_hovered.set(false);
+            }
+            _ => {}
         }
     }
 

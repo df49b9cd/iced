@@ -10,14 +10,14 @@ use super::utils::{
 // Asterisk skip logic
 // ---------------------------------------------------------------------------
 
-fn should_skip_asterisk(text: &str, index: usize, prev: u8, next: u8) -> bool {
+fn should_skip_asterisk(text: &str, index: usize, prev: u8, next: u8, has_dollar: bool) -> bool {
     // Skip if escaped.
     if prev == b'\\' {
         return true;
     }
 
     // Skip if within math block.
-    if text.contains('$') && is_within_math_block(text, index) {
+    if has_dollar && is_within_math_block(text, index) {
         return true;
     }
 
@@ -69,6 +69,7 @@ fn should_skip_asterisk(text: &str, index: usize, prev: u8, next: u8) -> bool {
 pub fn count_single_asterisks(text: &str) -> usize {
     let bytes = text.as_bytes();
     let len = bytes.len();
+    let has_dollar = text.contains('$');
     let mut count = 0;
     let mut in_code_block = false;
     let mut i = 0;
@@ -91,7 +92,7 @@ pub fn count_single_asterisks(text: &str) -> usize {
         if bytes[i] == b'*' {
             let prev = if i > 0 { bytes[i - 1] } else { 0 };
             let next = if i + 1 < len { bytes[i + 1] } else { 0 };
-            if !should_skip_asterisk(text, i, prev, next) {
+            if !should_skip_asterisk(text, i, prev, next, has_dollar) {
                 count += 1;
             }
         }
@@ -104,11 +105,11 @@ pub fn count_single_asterisks(text: &str) -> usize {
 // Underscore skip logic
 // ---------------------------------------------------------------------------
 
-fn should_skip_underscore(text: &str, index: usize, prev: u8, next: u8) -> bool {
+fn should_skip_underscore(text: &str, index: usize, prev: u8, next: u8, has_dollar: bool) -> bool {
     if prev == b'\\' {
         return true;
     }
-    if text.contains('$') && is_within_math_block(text, index) {
+    if has_dollar && is_within_math_block(text, index) {
         return true;
     }
     if is_within_link_or_image_url(text, index) {
@@ -137,6 +138,7 @@ fn should_skip_underscore(text: &str, index: usize, prev: u8, next: u8) -> bool 
 pub fn count_single_underscores(text: &str) -> usize {
     let bytes = text.as_bytes();
     let len = bytes.len();
+    let has_dollar = text.contains('$');
     let mut count = 0;
     let mut in_code_block = false;
     let mut i = 0;
@@ -158,7 +160,7 @@ pub fn count_single_underscores(text: &str) -> usize {
         if bytes[i] == b'_' {
             let prev = if i > 0 { bytes[i - 1] } else { 0 };
             let next = if i + 1 < len { bytes[i + 1] } else { 0 };
-            if !should_skip_underscore(text, i, prev, next) {
+            if !should_skip_underscore(text, i, prev, next, has_dollar) {
                 count += 1;
             }
         }
@@ -197,7 +199,15 @@ pub fn count_triple_asterisks(text: &str) -> usize {
             continue;
         }
         if bytes[i] == b'*' {
-            consecutive += 1;
+            // Skip escaped asterisks.
+            if i > 0 && bytes[i - 1] == b'\\' {
+                if consecutive >= 3 {
+                    count += consecutive / 3;
+                }
+                consecutive = 0;
+            } else {
+                consecutive += 1;
+            }
         } else {
             if consecutive >= 3 {
                 count += consecutive / 3;
@@ -398,6 +408,7 @@ fn should_skip_italic_completion(text: &str, content: &str, marker_index: usize)
 fn find_first_single_asterisk_index(text: &str) -> Option<usize> {
     let bytes = text.as_bytes();
     let len = bytes.len();
+    let has_dollar = text.contains('$');
     let mut in_code_block = false;
     let mut i = 0;
 
@@ -429,7 +440,7 @@ fn find_first_single_asterisk_index(text: &str) -> Option<usize> {
                 i += 1;
                 continue;
             }
-            if text.contains('$') && is_within_math_block(text, i) {
+            if has_dollar && is_within_math_block(text, i) {
                 i += 1;
                 continue;
             }
@@ -464,6 +475,7 @@ fn find_first_single_asterisk_index(text: &str) -> Option<usize> {
 fn find_first_single_underscore_index(text: &str) -> Option<usize> {
     let bytes = text.as_bytes();
     let len = bytes.len();
+    let has_dollar = text.contains('$');
     let mut in_code_block = false;
     let mut i = 0;
 
@@ -494,7 +506,7 @@ fn find_first_single_underscore_index(text: &str) -> Option<usize> {
                 i += 1;
                 continue;
             }
-            if text.contains('$') && is_within_math_block(text, i) {
+            if has_dollar && is_within_math_block(text, i) {
                 i += 1;
                 continue;
             }

@@ -1,7 +1,5 @@
 //! Token usage types
 
-use serde::{Deserialize, Serialize};
-
 /// Token usage breakdown for an AI model request.
 ///
 /// Represents the number of tokens used in different categories:
@@ -9,7 +7,8 @@ use serde::{Deserialize, Serialize};
 /// - **Output**: Tokens received from the model
 /// - **Reasoning**: Tokens used for chain-of-thought reasoning (if supported)
 /// - **Cached**: Tokens from context caching (if supported)
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Usage {
     /// Number of input tokens
     pub input: u64,

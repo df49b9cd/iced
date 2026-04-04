@@ -1,7 +1,7 @@
 use iced::animation::Easing;
 use iced::time::{Duration, Instant};
 
-use crate::settings::AnimationKind;
+use crate::settings::{AnimationKind, StreamSettings};
 
 /// Tracks word-level animation state for streaming content.
 ///
@@ -32,6 +32,14 @@ impl AnimationState {
             stagger: Duration::from_millis(30),
             easing: Easing::EaseOut,
         }
+    }
+
+    /// Creates an [`AnimationState`] from [`StreamSettings`], inheriting the
+    /// animation kind, duration, and stagger so defaults aren't duplicated.
+    pub fn from_settings(settings: &StreamSettings) -> Self {
+        Self::new(settings.animation)
+            .duration(settings.animation_duration)
+            .stagger(settings.animation_stagger)
     }
 
     /// Sets the duration per word.
@@ -154,5 +162,111 @@ fn apply_easing(t: f32, easing: Easing) -> f32 {
             let t1 = t - 1.0;
             1.0 + t1 * t1 * t1
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn now() -> Instant {
+        Instant::now()
+    }
+
+    #[test]
+    fn none_animation_always_opaque() {
+        let state = AnimationState::new(AnimationKind::None);
+        assert_eq!(state.word_opacity(0, now()), 1.0);
+        assert_eq!(state.word_opacity(999, now()), 1.0);
+    }
+
+    #[test]
+    fn unregistered_word_is_transparent() {
+        let state = AnimationState::new(AnimationKind::FadeIn);
+        assert_eq!(state.word_opacity(0, now()), 0.0);
+    }
+
+    #[test]
+    fn word_fully_revealed_after_duration() {
+        let mut state = AnimationState::new(AnimationKind::FadeIn)
+            .duration(Duration::from_millis(100));
+        let t = now();
+        state.reveal_words(1, t);
+        let after = t + Duration::from_millis(200);
+        assert_eq!(state.word_opacity(0, after), 1.0);
+    }
+
+    #[test]
+    fn word_zero_before_reveal_time() {
+        let mut state = AnimationState::new(AnimationKind::FadeIn)
+            .stagger(Duration::from_millis(1000));
+        let t = now();
+        state.reveal_words(2, t);
+        // Word 1 is staggered 1s later — should be 0 at t+0
+        assert_eq!(state.word_opacity(1, t), 0.0);
+    }
+
+    #[test]
+    fn is_animating_while_mid_reveal() {
+        let mut state = AnimationState::new(AnimationKind::FadeIn)
+            .duration(Duration::from_millis(500));
+        let t = now();
+        state.reveal_words(1, t);
+        assert!(state.is_animating(t));
+        assert!(!state.is_animating(t + Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn has_started_and_finished() {
+        let mut state = AnimationState::new(AnimationKind::FadeIn)
+            .duration(Duration::from_millis(10));
+        let t = now();
+        assert!(!state.has_started());
+        assert!(!state.has_finished(t));
+
+        state.reveal_words(1, t);
+        assert!(state.has_started());
+
+        let later = t + Duration::from_secs(1);
+        assert!(state.has_finished(later));
+    }
+
+    #[test]
+    fn easing_boundaries() {
+        // All easings should return 0 at t=0 and 1 at t=1
+        for easing in [Easing::Linear, Easing::EaseIn, Easing::EaseOut,
+                       Easing::EaseInQuad, Easing::EaseOutQuad, Easing::EaseInOutQuad] {
+            assert_eq!(apply_easing(0.0, easing), 0.0, "easing {:?} at 0", easing);
+            assert!((apply_easing(1.0, easing) - 1.0).abs() < 1e-6,
+                    "easing {:?} at 1", easing);
+        }
+    }
+
+    #[test]
+    fn easing_monotonic() {
+        // Easings should be monotonically non-decreasing from 0 to 1
+        for easing in [Easing::Linear, Easing::EaseIn, Easing::EaseOut] {
+            let mut prev = 0.0f32;
+            for i in 0..=100 {
+                let t = i as f32 / 100.0;
+                let v = apply_easing(t, easing);
+                assert!(v >= prev - 1e-6, "easing {:?} not monotonic at t={}", easing, t);
+                prev = v;
+            }
+        }
+    }
+
+    #[test]
+    fn from_settings_copies_values() {
+        use iced::widget::markdown;
+        use iced::theme::palette::Seed;
+        let style = markdown::Style::from_palette(Seed::CATPPUCCIN_MOCHA);
+        let settings = StreamSettings::new(markdown::Settings::with_text_size(16.0, style))
+            .animation(AnimationKind::FadeIn)
+            .animation_duration(Duration::from_millis(500))
+            .animation_stagger(Duration::from_millis(50));
+        let state = AnimationState::from_settings(&settings);
+        assert_eq!(state.duration, Duration::from_millis(500));
+        assert_eq!(state.stagger, Duration::from_millis(50));
     }
 }
